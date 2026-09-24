@@ -17,9 +17,40 @@ function onLimit(req: Request, res: import("express").Response, _next: unknown, 
   res.status(429).json({ error: "rate_limited", retryAfterSeconds: Math.ceil(options.windowMs / 1000) });
 }
 
+const PRIVATE_IP = [
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^127\./,
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // carrier-grade NAT 100.64.0.0/10
+  /^169\.254\./,
+  /^::1$/,
+  /^f[cd][0-9a-f]{2}:/i, // fc00::/7
+  /^fe80:/i,
+  /^::ffff:(10|127)\./i,
+];
+
+let proxyHopsInUse = 0;
+let warnedPrivateIp = false;
+
+/** Called once at startup so the guard knows whether we are behind proxies. */
+export function setTrustedProxyHops(hops: number) {
+  proxyHopsInUse = hops;
+}
+
 function ipKey(req: Request): string {
   // req.ip honours the app's "trust proxy" setting; ipKeyGenerator groups IPv6 by subnet.
-  return `ip:${ipKeyGenerator(req.ip ?? "unknown")}`;
+  const ip = req.ip ?? "unknown";
+  // Behind proxies, a private address here means TRUST_PROXY_HOPS no longer matches
+  // the platform's proxy chain and all users may be sharing one counter.
+  if (proxyHopsInUse > 0 && !warnedPrivateIp && PRIVATE_IP.some((r) => r.test(ip))) {
+    warnedPrivateIp = true;
+    console.warn(
+      `rate-limit: client IP resolved to private address ${ip} with TRUST_PROXY_HOPS=${proxyHopsInUse}. ` +
+        `The proxy chain may have changed; re-verify the hop count. X-Forwarded-For="${req.get("X-Forwarded-For") ?? ""}"`,
+    );
+  }
+  return `ip:${ipKeyGenerator(ip)}`;
 }
 
 /** 100 requests per minute per IP on every route except /health (platform health checks). */

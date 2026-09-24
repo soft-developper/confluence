@@ -43,4 +43,4 @@ Schema changes: edit `src/db/schema.ts`, run `npm run db:generate`, commit the n
 - Outbound to Circle: token bucket, `CIRCLE_MAX_RPS` per second.
 - Counters are in memory (one API instance). Before scaling out, swap the store in `src/middleware/rateLimits.ts` (`createStore`).
 - Create endpoints require an `Idempotency-Key` header; see `src/middleware/idempotency.ts`.
-- `TRUST_PROXY_HOPS`: 0 locally, 1 on Render.
+- `TRUST_PROXY_HOPS`: 0 locally, 3 on Render (Cloudflare, Render load balancer, local proxy; verified live). A warning is logged if the resolved client IP is ever private.
