@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { ipRateLimit } from "./middleware/rateLimits.js";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { healthRouter } from "./routes/health.js";
@@ -9,6 +10,7 @@ import type { ChainRegistry } from "./chains/registry.js";
 export function createApp(config: Config, db: Db, registry: ChainRegistry) {
   const app = express();
   app.disable("x-powered-by");
+  app.set("trust proxy", config.TRUST_PROXY_HOPS);
 
   const allowed = new Set(config.CORS_ORIGINS);
 
@@ -35,6 +37,7 @@ export function createApp(config: Config, db: Db, registry: ChainRegistry) {
     }),
   );
 
+  app.use(ipRateLimit());
   app.use(express.json({ limit: "100kb" }));
   app.use(healthRouter(config, db));
   app.use(chainsRouter(config, registry));

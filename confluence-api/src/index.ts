@@ -2,6 +2,7 @@ import { loadConfig, type Config } from "./config.js";
 import { createApp } from "./app.js";
 import { createDb } from "./db/client.js";
 import { buildChainRegistry } from "./chains/registry.js";
+import { startIdempotencySweeper } from "./middleware/idempotency.js";
 
 function configOrExit(): Config {
   try {
@@ -19,6 +20,8 @@ console.log(`chain registry: ${registry.chains.length} ${config.CONFLUENCE_ENV} 
 if (registry.missingSpeed.length > 0) {
   console.warn(`chain registry: no Circle finality data for ${registry.missingSpeed.join(", ")} (shown without ETA)`);
 }
+
+startIdempotencySweeper(db);
 
 createApp(config, db, registry).listen(config.PORT, () => {
   console.log(`confluence-api [${config.CONFLUENCE_ENV}] listening on :${config.PORT}`);

@@ -26,6 +26,11 @@ const EnvSchema = z
       .min(1, "is required (libsql://<db>-<org>.turso.io)")
       .refine((v) => /^(libsql|https|wss|file):/.test(v), "must start with libsql://, https://, wss:// or file:"),
     TURSO_AUTH_TOKEN: optionalString,
+    // Proxy hops in front of the API whose X-Forwarded-For entries we trust.
+    // 0 locally (no proxy). Render: set 1, verified on the live service in Stage 0f.
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Outbound limiter for our calls to Circle APIs (requests per second, burst = 2x).
+    CIRCLE_MAX_RPS: z.coerce.number().positive().max(100).default(5),
     // Circle API keys are environment specific (testnet and mainnet each need their own).
     CIRCLE_API_KEY: optionalString,
   })
