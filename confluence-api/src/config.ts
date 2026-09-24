@@ -31,6 +31,11 @@ const EnvSchema = z
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
     // Outbound limiter for our calls to Circle APIs (requests per second, burst = 2x).
     CIRCLE_MAX_RPS: z.coerce.number().positive().max(100).default(5),
+    // TEMPORARY (Stage 0f): enables GET /debug/client-ip when set (min 24 chars).
+    DEBUG_TOKEN: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().min(24).optional(),
+    ),
     // Circle API keys are environment specific (testnet and mainnet each need their own).
     CIRCLE_API_KEY: optionalString,
   })
