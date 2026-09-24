@@ -3,8 +3,10 @@ import cors from "cors";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { healthRouter } from "./routes/health.js";
+import { chainsRouter } from "./routes/chains.js";
+import type { ChainRegistry } from "./chains/registry.js";
 
-export function createApp(config: Config, db: Db) {
+export function createApp(config: Config, db: Db, registry: ChainRegistry) {
   const app = express();
   app.disable("x-powered-by");
 
@@ -35,6 +37,7 @@ export function createApp(config: Config, db: Db) {
 
   app.use(express.json({ limit: "100kb" }));
   app.use(healthRouter(config, db));
+  app.use(chainsRouter(config, registry));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });

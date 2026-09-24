@@ -16,6 +16,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@circle-fin/app-kit": "^1.15.2",
     "@libsql/client": "^0.18.0",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.3",
