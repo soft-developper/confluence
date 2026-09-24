@@ -29,6 +29,8 @@ cd confluence-api && npm run db:migrate
 
 Schema changes: edit `src/db/schema.ts`, run `npm run db:generate`, commit the new file in `drizzle/`, then `npm run db:migrate`.
 
+Wallets: wagmi v3 with browser wallets (EIP-6963), Coinbase Wallet and WalletConnect. WalletConnect needs `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (Reown dashboard) and your domains on the Reown allowlist; without it the option is hidden.
+
 `CONFLUENCE_ENV` (API) and `NEXT_PUBLIC_CONFLUENCE_ENV` (web) must match. The home page shows an alert if they don't.
 
 ## API endpoints

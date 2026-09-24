@@ -14,6 +14,10 @@ export interface BridgeChain {
   /** Explorer URL template containing "{hash}" */
   explorerTxUrl: string;
   usdcAddress: string;
+  /** Native gas token, as reported by App Kit (on Arc this is USDC). */
+  nativeCurrency: { name: string; symbol: string; decimals: number };
+  /** Public RPC endpoints from App Kit; the first is primary. */
+  rpcUrls: string[];
   /** Whether Circle's Forwarding Service can mint on this chain as the destination. */
   forwarderAsDestination: boolean;
   /** Source-side attestation times from Circle's docs; null when not listed. */
@@ -44,6 +48,8 @@ export function buildChainRegistry(config: Config, kit: Pick<AppKit, "getSupport
       isTestnet: c.isTestnet,
       explorerTxUrl: c.explorerUrl,
       usdcAddress: c.usdcAddress,
+      nativeCurrency: { name: c.nativeCurrency.name, symbol: c.nativeCurrency.symbol, decimals: c.nativeCurrency.decimals },
+      rpcUrls: [...c.rpcEndpoints],
       forwarderAsDestination: c.cctp.forwarderSupported.destination,
       speed: finalityFor(c.chain),
     });
