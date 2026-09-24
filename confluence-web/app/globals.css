@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* Confluence brand tokens. Source of truth: the Confluence design system. */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a121f;
+  --surface: #111b2c;
+  --surface-raised: #16223a;
+  --border: #22304a;
+  --border-control: #5a6b88;
+  --ink: #e8edf5;
+  --ink-muted: #8fa0b8;
+  --source-text: #4590f0;
+  --destination-text: #18b6a7;
+  --action-text: #8e8cf5;
+  --danger: #f0707a;
+  --warning: #f2b84b;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --border: #dce2ec;
+    --border-control: #8593a8;
+    --ink: #0a121f;
+    --ink-muted: #56647a;
+    --source-text: #286fcd;
+    --destination-text: #107d73;
+    --action-text: #5d5aef;
+    --danger: #c2303c;
+    --warning: #8a5a00;
+  }
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #dce2ec;
+  --border-control: #8593a8;
+  --ink: #0a121f;
+  --ink-muted: #56647a;
+  --source-text: #286fcd;
+  --destination-text: #107d73;
+  --action-text: #5d5aef;
+  --danger: #c2303c;
+  --warning: #8a5a00;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-control: var(--border-control);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-source-text: var(--source-text);
+  --color-destination-text: var(--destination-text);
+  --color-action-text: var(--action-text);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+
+  --color-navy: #0a121f;
+  --color-source: #2f80ec;
+  --color-destination: #18b6a7;
+  --color-action: #5d5aef;
+  --color-action-hover: #4b48d9;
+  --color-on-action: #ffffff;
+  --color-on-signal: #0a121f;
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+html {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-display);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
