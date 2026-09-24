@@ -34,6 +34,7 @@ Schema changes: edit `src/db/schema.ts`, run `npm run db:generate`, commit the n
 ## API endpoints
 
 - `GET /health` - service, environment and database status (503 when the database is unreachable)
+- `POST /quotes` - bridge quote: platform fee (0.30 USDC up to 1,000; 0.10% above), Circle CCTP and Forwarding fee estimates from the CCTP API, total debit, expected receive, and the `customFee` for App Kit. Valid 60s, 60/min per wallet.
 - `GET /chains` - bridge chains for this environment, built from Circle App Kit `getSupportedChains("bridge")` (EVM only in v1), with Fast and Standard attestation times from Circle's finality docs (`src/chains/finality.ts`)
 
 ## Rate limits and idempotency
@@ -44,3 +45,11 @@ Schema changes: edit `src/db/schema.ts`, run `npm run db:generate`, commit the n
 - Counters are in memory (one API instance). Before scaling out, swap the store in `src/middleware/rateLimits.ts` (`createStore`).
 - Create endpoints require an `Idempotency-Key` header; see `src/middleware/idempotency.ts`.
 - `TRUST_PROXY_HOPS`: 0 locally, 3 on Render (Cloudflare, Render load balancer, local proxy; verified live). A warning is logged if the resolved client IP is ever private.
+
+## Fee recipient
+
+Set once per environment (writes the Turso database in `.env`):
+
+```bash
+cd confluence-api && npm run fees:set-recipient -- 0xYourFeeAddress
+```

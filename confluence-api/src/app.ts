@@ -5,9 +5,11 @@ import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { healthRouter } from "./routes/health.js";
 import { chainsRouter } from "./routes/chains.js";
+import { quotesRouter } from "./routes/quotes.js";
+import type { IrisClient } from "./circle/iris.js";
 import type { ChainRegistry } from "./chains/registry.js";
 
-export function createApp(config: Config, db: Db, registry: ChainRegistry) {
+export function createApp(config: Config, db: Db, registry: ChainRegistry, iris: IrisClient) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", config.TRUST_PROXY_HOPS);
@@ -42,6 +44,7 @@ export function createApp(config: Config, db: Db, registry: ChainRegistry) {
   app.use(express.json({ limit: "100kb" }));
   app.use(healthRouter(config, db));
   app.use(chainsRouter(config, registry));
+  app.use(quotesRouter(db, registry, iris));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });
