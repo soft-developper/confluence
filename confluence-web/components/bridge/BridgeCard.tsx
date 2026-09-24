@@ -1,17 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits, isAddress, parseUnits } from "viem";
-import { useConnection, useSwitchChain } from "wagmi";
+import { useBalance, useConnection, useSwitchChain } from "wagmi";
 import { useBridgeChains } from "@/components/Providers";
 import { ConnectModal } from "@/components/wallet/ConnectModal";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useUsdcBalance } from "@/hooks/useUsdcBalance";
+import { useBridgeExecution } from "@/hooks/useBridgeExecution";
 import { fetchMaxAmount, postQuote, quoteErrorText, type Quote } from "@/lib/api";
 import type { BridgeChain } from "@/lib/chains";
 import { ChainDot } from "./ChainDot";
 import { ChainPicker } from "./ChainPicker";
+import { ReviewPanel } from "./ReviewPanel";
 
 const AMOUNT_INPUT = /^(\d{0,12})(\.\d{0,6})?$/;
 const isArc = (c: BridgeChain) => c.id === "Arc" || c.id === "Arc_Testnet";
@@ -58,7 +60,7 @@ function Toggle({ label, sub, on, locked, onChange }: { label: string; sub: stri
 
 export function BridgeCard() {
   const { chains, byEvmId } = useBridgeChains();
-  const { address, chainId, status } = useConnection();
+  const { address, chainId, status, connector } = useConnection();
   const { mutate: switchChain, isPending: switching } = useSwitchChain();
 
   const arc = useMemo(() => chains.find(isArc), [chains]);
@@ -77,6 +79,10 @@ export function BridgeCard() {
   const [connectOpen, setConnectOpen] = useState(false);
   const closeConnect = useCallback(() => setConnectOpen(false), []);
   const closePicker = useCallback(() => setPicker(null), []);
+  const [reviewing, setReviewing] = useState(false);
+  const [frozenQuote, setFrozenQuote] = useState<Quote | null>(null);
+  const exec = useBridgeExecution();
+  const usedQuoteIds = useRef(new Set<string>());
 
   const from = fromId ? chains.find((c) => c.id === fromId) : undefined;
   const to = toId ? chains.find((c) => c.id === toId) : undefined;
@@ -138,7 +144,8 @@ export function BridgeCard() {
   const quoteQ = useQuery({
     queryKey: ["quote", req],
     queryFn: ({ signal }) => postQuote(req!, signal),
-    enabled: !!req,
+    // Paused once signing starts: the transfer has its own frozen values.
+    enabled: !!req && exec.state.phase === "idle",
     retry: false,
     refetchInterval: 45_000, // quotes live 60s; refresh before expiry
     placeholderData: (prev) => prev,
@@ -176,6 +183,69 @@ export function BridgeCard() {
     setToId(fromId);
   }
 
+  // ---------- Review and signing (Stage 2d) ----------
+  const execPhase = exec.state.phase;
+  const execTransfer = exec.state.transfer;
+  useEffect(() => {
+    if (execTransfer) usedQuoteIds.current.add(execTransfer.quoteId);
+  }, [execTransfer]);
+  // Leave review if the wallet disconnects before signing starts.
+  useEffect(() => {
+    if (reviewing && status !== "connected" && execPhase === "idle") setReviewing(false);
+  }, [reviewing, status, execPhase]);
+  // After a successful bridge, show the new source balance.
+  const refetchBalance = balance.refetch;
+  useEffect(() => {
+    if (execPhase === "success") void refetchBalance();
+  }, [execPhase, refetchBalance]);
+
+  const reviewForwarding = frozenQuote?.useForwarder ?? quote?.useForwarder ?? false;
+  const destGas = useBalance({
+    address,
+    chainId: to?.evmChainId,
+    query: { enabled: reviewing && !!to && !!address && !reviewForwarding },
+  });
+
+  /** A quote that has not been used for a transfer and has at least 15s left; refetched otherwise. */
+  const getQuote = useCallback(
+    async ({ fresh }: { fresh: boolean }): Promise<Quote> => {
+      const current = quoteQ.data;
+      const usable =
+        current && !usedQuoteIds.current.has(current.id) && new Date(current.expiresAt).getTime() - Date.now() > 15_000;
+      let q = current;
+      if (fresh || !usable) {
+        const r = await quoteQ.refetch();
+        if (r.error) throw r.error;
+        q = r.data;
+      }
+      if (!q) throw new Error("no quote available");
+      setFrozenQuote(q);
+      return q;
+    },
+    [quoteQ],
+  );
+
+  function confirmBridge() {
+    if (!from || !to || !address || !connector) return;
+    void exec.start({
+      getQuote,
+      sender: address,
+      from,
+      to,
+      registry: chains,
+      getProvider: () => connector.getProvider(),
+    });
+  }
+
+  function leaveReview() {
+    if (exec.busy) return;
+    const succeeded = execPhase === "success";
+    exec.reset();
+    setFrozenQuote(null);
+    setReviewing(false);
+    if (succeeded) setAmount("");
+  }
+
   // Primary action
   let action: { label: string; onClick?: () => void; disabled?: boolean };
   if (status !== "connected") action = { label: "Connect wallet", onClick: () => setConnectOpen(true) };
@@ -184,7 +254,17 @@ export function BridgeCard() {
   else if (!amountBase) action = { label: "Enter an amount", disabled: true };
   else if (!recipientValid) action = { label: "Enter a valid recipient", disabled: true };
   else if (insufficient) action = { label: "Insufficient USDC", disabled: true };
-  else action = { label: "Review bridge", disabled: true }; // Review and signing: Stage 2d
+  else if (!quote || quoteQ.error) action = { label: updating ? "Getting quote..." : "Review bridge", disabled: true };
+  else
+    action = {
+      label: "Review bridge",
+      onClick: () => {
+        // Lock the route: a wallet network change during review must not silently
+        // swap the source chain (the default-route effect follows the wallet).
+        setRouteTouched(true);
+        setReviewing(true);
+      },
+    };
 
   const chainCard = (label: string, c: BridgeChain | undefined, side: "source" | "destination", onClick: () => void, sub?: string) => (
     <button
@@ -203,6 +283,29 @@ export function BridgeCard() {
 
   const balanceText =
     status !== "connected" ? "Connect to see balance" : balance.isLoading ? "Balance ..." : balanceBase !== undefined ? `Balance ${fmt(formatUnits(balanceBase, 6))}` : "Balance unavailable";
+
+  const reviewQuote = execPhase === "idle" ? quote : (frozenQuote ?? quote);
+  if (reviewing && reviewQuote && from && to && address) {
+    return (
+      <section className="flex w-full max-w-[460px] flex-col gap-5 rounded-lg border border-border bg-surface p-5 sm:p-6" aria-labelledby="bridge-title">
+        <ReviewPanel
+          quote={reviewQuote}
+          from={from}
+          to={to}
+          sender={address}
+          exec={exec.state}
+          onSourceChain={chainId === from.evmChainId}
+          switching={switching}
+          onSwitch={() => switchChain({ chainId: from.evmChainId })}
+          destinationGas={destGas.data?.value}
+          onBack={leaveReview}
+          onConfirm={confirmBridge}
+          onRetry={() => void exec.retry()}
+          onDone={leaveReview}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="flex w-full max-w-[460px] flex-col gap-5 rounded-lg border border-border bg-surface p-5 sm:p-6" aria-labelledby="bridge-title">
@@ -415,7 +518,6 @@ export function BridgeCard() {
       >
         {action.label}
       </button>
-      {action.label === "Review bridge" && <p className="-mt-3 text-center text-xs text-ink-muted">Review and signing arrive in the next part (2d).</p>}
 
       <ChainPicker
         open={picker !== null}
