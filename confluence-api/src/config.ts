@@ -30,8 +30,12 @@ const EnvSchema = z
     // 0 locally (no proxy). Render: 3 (Cloudflare, Render load balancer, local proxy),
     // verified on the live service in Stage 0f.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
-    // Outbound limiter for our calls to Circle APIs (requests per second, burst = 2x).
-    CIRCLE_MAX_RPS: z.coerce.number().positive().max(100).default(5),
+    // Outbound limiter for our calls to Circle's CCTP API (Iris), requests per second, burst = 2x.
+    // Circle documents 35 requests per second for the CCTP API; going over blocks ALL
+    // requests for 5 minutes (HTTP 429). Source: https://developers.circle.com/cctp/technical-guide
+    // (one Circle quickstart says 40; we use the lower number). The cap of 15 keeps the
+    // 2x burst (30) under 35.
+    CIRCLE_MAX_RPS: z.coerce.number().positive().max(15).default(10),
     // Circle API keys are environment specific (testnet and mainnet each need their own).
     CIRCLE_API_KEY: optionalString,
   })

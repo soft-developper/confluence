@@ -7,6 +7,7 @@ import { healthRouter } from "./routes/health.js";
 import { chainsRouter } from "./routes/chains.js";
 import { quotesRouter } from "./routes/quotes.js";
 import { feesRouter } from "./routes/fees.js";
+import { REPORT_TOKEN_HEADER, transfersRouter } from "./routes/transfers.js";
 import type { IrisClient } from "./circle/iris.js";
 import type { ChainRegistry } from "./chains/registry.js";
 
@@ -35,7 +36,7 @@ export function createApp(config: Config, db: Db, registry: ChainRegistry, iris:
       // from origins not on the allowlist get no CORS headers and are blocked.
       origin: (origin, callback) => callback(null, !origin || allowed.has(origin)),
       methods: ["GET", "POST", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Idempotency-Key"],
+      allowedHeaders: ["Content-Type", "Idempotency-Key", REPORT_TOKEN_HEADER],
       credentials: false,
       maxAge: 600,
     }),
@@ -47,6 +48,7 @@ export function createApp(config: Config, db: Db, registry: ChainRegistry, iris:
   app.use(chainsRouter(config, registry));
   app.use(quotesRouter(db, registry, iris));
   app.use(feesRouter());
+  app.use(transfersRouter(db));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });

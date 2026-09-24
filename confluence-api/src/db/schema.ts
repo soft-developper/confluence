@@ -66,11 +66,16 @@ export const transfers = sqliteTable(
     burnTxHash: text("burn_tx_hash"),
     mintTxHash: text("mint_tx_hash"),
     errorCode: text("error_code"),
+    // sha256 (hex) of the secret report token returned once by POST /transfers.
+    // The browser sends the token with step reports; we never store the token itself.
+    reportTokenHash: text("report_token_hash"),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
   },
   (t) => [
     uniqueIndex("transfers_idempotency_key_uq").on(t.idempotencyKey),
+    // one transfer per quote
+    uniqueIndex("transfers_quote_id_uq").on(t.quoteId),
     uniqueIndex("transfers_burn_tx_hash_uq").on(t.burnTxHash),
     index("transfers_state_idx").on(t.state),
     index("transfers_sender_idx").on(t.sender),
