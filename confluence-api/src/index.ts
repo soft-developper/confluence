@@ -1,7 +1,17 @@
+import { loadConfig, type Config } from "./config.js";
 import { createApp } from "./app.js";
 
-const port = Number(process.env.PORT ?? 4000);
+function configOrExit(): Config {
+  try {
+    return loadConfig();
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
+}
 
-createApp().listen(port, () => {
-  console.log(`confluence-api listening on :${port}`);
+const config = configOrExit();
+
+createApp(config).listen(config.PORT, () => {
+  console.log(`confluence-api [${config.CONFLUENCE_ENV}] listening on :${config.PORT}`);
 });

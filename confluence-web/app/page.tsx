@@ -1,5 +1,7 @@
 import Image from "next/image";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { EnvBadge } from "@/components/EnvBadge";
+import { ApiStatus } from "@/components/ApiStatus";
 
 export default function Home() {
   return (
@@ -8,6 +10,7 @@ export default function Home() {
         <div className="flex items-center gap-2.5">
           <Image src="/confluence-mark.svg" alt="" width={24} height={30} priority />
           <span className="text-lg font-medium">Confluence</span>
+          <EnvBadge />
         </div>
         <ThemeToggle />
       </header>
@@ -27,6 +30,7 @@ export default function Home() {
             <span className="rounded-sm bg-action px-2 py-0.5 font-mono text-xs text-on-action">Confluence</span>
             <span className="rounded-sm bg-destination px-2 py-0.5 font-mono text-xs text-on-signal">Destination</span>
           </div>
+          <ApiStatus />
         </section>
       </main>
     </div>
