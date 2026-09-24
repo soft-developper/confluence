@@ -37,6 +37,7 @@ Wallets: wagmi v3 with browser wallets (EIP-6963), Coinbase Wallet and WalletCon
 
 - `GET /health` - service, environment and database status (503 when the database is unreachable)
 - `POST /quotes` - bridge quote: platform fee (0.30 USDC up to 1,000; 0.10% above), Circle CCTP and Forwarding fee estimates from the CCTP API, total debit, expected receive, and the `customFee` for App Kit. Valid 60s, 60/min per wallet.
+- `GET /fees/max-amount?balance=<base units>` - largest amount whose amount + platform fee fits the balance (powers the Max button).
 - `GET /chains` - bridge chains for this environment, built from Circle App Kit `getSupportedChains("bridge")` (EVM only in v1), with Fast and Standard attestation times from Circle's finality docs (`src/chains/finality.ts`)
 
 ## Rate limits and idempotency

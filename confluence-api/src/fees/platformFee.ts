@@ -21,3 +21,20 @@ export function calculatePlatformFee(amountBase: bigint): bigint {
 export function netPlatformFee(feeBase: bigint): bigint {
   return (feeBase * 90n) / 100n;
 }
+
+/**
+ * Largest bridge amount a balance can cover, given the fee is charged ON TOP of
+ * the amount (App Kit customFee): max a such that a + calculatePlatformFee(a) <= balance.
+ * Returns 0n when the balance cannot cover even the flat fee plus 1 base unit.
+ */
+export function maxAmountForBalance(balance: bigint): bigint {
+  if (balance <= FLAT_FEE) return 0n;
+  // Flat tier: a <= threshold and a + FLAT_FEE <= balance
+  const flatCandidate = balance - FLAT_FEE < FLAT_FEE_THRESHOLD ? balance - FLAT_FEE : FLAT_FEE_THRESHOLD;
+  // Percent tier: a > threshold and a + ceil(a * bps / 10000) <= balance
+  let pct = (balance * 10_000n) / (10_000n + PERCENT_FEE_BPS);
+  while (pct > FLAT_FEE_THRESHOLD && pct + calculatePlatformFee(pct) > balance) pct -= 1n;
+  while (pct + 1n > FLAT_FEE_THRESHOLD && pct + 1n + calculatePlatformFee(pct + 1n) <= balance) pct += 1n;
+  const pctCandidate = pct > FLAT_FEE_THRESHOLD ? pct : 0n;
+  return pctCandidate > flatCandidate ? pctCandidate : flatCandidate;
+}

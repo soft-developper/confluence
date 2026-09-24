@@ -4,7 +4,7 @@ import { EnvBadge } from "@/components/EnvBadge";
 import { ApiStatus } from "@/components/ApiStatus";
 import { Providers } from "@/components/Providers";
 import { WalletButton } from "@/components/wallet/WalletButton";
-import { UsdcBalance } from "@/components/wallet/UsdcBalance";
+import { BridgeCard } from "@/components/bridge/BridgeCard";
 
 export default function Home() {
   return (
@@ -21,15 +21,11 @@ export default function Home() {
             <WalletButton />
           </div>
         </header>
-        <main className="flex flex-1 items-start justify-center px-4 pt-14">
-          <section className="w-full max-w-[460px] rounded-lg border border-border bg-surface p-6">
-            <h1 className="text-[22px] font-medium">Wallet layer</h1>
-            <p className="mt-2 text-sm text-ink-muted">Connect a wallet to check the Stage 2b wallet layer. The bridge form arrives in 2c.</p>
-            <div className="mt-6">
-              <UsdcBalance />
-            </div>
+        <main className="flex flex-1 flex-col items-center gap-4 px-4 pt-10 pb-16">
+          <BridgeCard />
+          <div className="w-full max-w-[460px]">
             <ApiStatus />
-          </section>
+          </div>
         </main>
       </div>
     </Providers>

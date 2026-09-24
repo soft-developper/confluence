@@ -6,6 +6,7 @@ import type { Db } from "./db/client.js";
 import { healthRouter } from "./routes/health.js";
 import { chainsRouter } from "./routes/chains.js";
 import { quotesRouter } from "./routes/quotes.js";
+import { feesRouter } from "./routes/fees.js";
 import type { IrisClient } from "./circle/iris.js";
 import type { ChainRegistry } from "./chains/registry.js";
 
@@ -45,6 +46,7 @@ export function createApp(config: Config, db: Db, registry: ChainRegistry, iris:
   app.use(healthRouter(config, db));
   app.use(chainsRouter(config, registry));
   app.use(quotesRouter(db, registry, iris));
+  app.use(feesRouter());
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });
