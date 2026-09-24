@@ -1,5 +1,6 @@
 import { loadConfig, type Config } from "./config.js";
 import { createApp } from "./app.js";
+import { createDb } from "./db/client.js";
 
 function configOrExit(): Config {
   try {
@@ -11,7 +12,8 @@ function configOrExit(): Config {
 }
 
 const config = configOrExit();
+const db = createDb(config);
 
-createApp(config).listen(config.PORT, () => {
+createApp(config, db).listen(config.PORT, () => {
   console.log(`confluence-api [${config.CONFLUENCE_ENV}] listening on :${config.PORT}`);
 });

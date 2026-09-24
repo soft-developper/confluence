@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
 import type { Config } from "./config.js";
+import type { Db } from "./db/client.js";
 import { healthRouter } from "./routes/health.js";
 
-export function createApp(config: Config) {
+export function createApp(config: Config, db: Db) {
   const app = express();
   app.disable("x-powered-by");
 
@@ -33,7 +34,7 @@ export function createApp(config: Config) {
   );
 
   app.use(express.json({ limit: "100kb" }));
-  app.use(healthRouter(config));
+  app.use(healthRouter(config, db));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });

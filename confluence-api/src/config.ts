@@ -19,13 +19,20 @@ const EnvSchema = z
       .min(1)
       .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean))
       .pipe(z.array(origin).min(1)),
-    // Used from Stage 0c (Turso). Optional until then.
-    TURSO_DATABASE_URL: optionalString,
+    // Turso database for THIS environment (one database per environment).
+    TURSO_DATABASE_URL: z
+      .string()
+      .trim()
+      .min(1, "is required (libsql://<db>-<org>.turso.io)")
+      .refine((v) => /^(libsql|https|wss|file):/.test(v), "must start with libsql://, https://, wss:// or file:"),
     TURSO_AUTH_TOKEN: optionalString,
     // Circle API keys are environment specific (testnet and mainnet each need their own).
     CIRCLE_API_KEY: optionalString,
   })
   .superRefine((env, ctx) => {
+    if (!env.TURSO_DATABASE_URL.startsWith("file:") && !env.TURSO_AUTH_TOKEN) {
+      ctx.addIssue({ code: "custom", path: ["TURSO_AUTH_TOKEN"], message: "is required for a remote Turso database" });
+    }
     if (env.CONFLUENCE_ENV === "mainnet") {
       for (const o of env.CORS_ORIGINS) {
         const u = new URL(o);

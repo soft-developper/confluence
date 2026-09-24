@@ -21,4 +21,12 @@ cd confluence-api && npm install && npm run dev   # http://localhost:4000/health
 cd confluence-web && npm install && npm run dev   # http://localhost:3000
 ```
 
+Database (Turso, one database per environment). Put the testnet database URL and token in `confluence-api/.env`, then apply migrations:
+
+```bash
+cd confluence-api && npm run db:migrate
+```
+
+Schema changes: edit `src/db/schema.ts`, run `npm run db:generate`, commit the new file in `drizzle/`, then `npm run db:migrate`.
+
 `CONFLUENCE_ENV` (API) and `NEXT_PUBLIC_CONFLUENCE_ENV` (web) must match. The home page shows an alert if they don't.
