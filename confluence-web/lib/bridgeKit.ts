@@ -42,3 +42,9 @@ export async function loadBridgeKit(provider: EIP1193Provider, registry: readonl
 }
 
 export type LoadedBridgeKit = Awaited<ReturnType<typeof loadBridgeKit>>;
+
+/** App Kit's bridge chain definitions (CCTP contracts, domains). No wallet needed. */
+export async function loadChainDefinitions() {
+  const { AppKit } = await import("@circle-fin/app-kit");
+  return new AppKit().getSupportedChains("bridge");
+}

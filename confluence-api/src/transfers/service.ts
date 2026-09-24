@@ -215,6 +215,8 @@ export async function recordStepReport(db: Db, transferId: string, token: string
 export async function getTransfer(db: Db, transferId: string) {
   const t = await db.query.transfers.findFirst({ where: eq(transfers.id, transferId) });
   if (!t) throw new TransferError(404, "transfer_not_found", "transfer not found");
+  // Fee estimates live on the quote the transfer was created from.
+  const q = await db.query.quotes.findFirst({ where: eq(quotes.id, t.quoteId) });
   const events = await db
     .select({
       fromState: transferEvents.fromState,
@@ -240,6 +242,16 @@ export async function getTransfer(db: Db, transferId: string) {
     useForwarder: t.useForwarder,
     amount: money(t.amountBase),
     platformFee: money(t.platformFeeBase),
+    ...(q
+      ? {
+          cctpFee: { ...money(q.cctpFeeBase), estimated: true },
+          forwardingFee: { ...money(q.forwardingFeeBase), estimated: true },
+          expectedReceive: {
+            ...money((BigInt(t.amountBase) - BigInt(q.cctpFeeBase) - BigInt(q.forwardingFeeBase)).toString()),
+            estimated: true,
+          },
+        }
+      : {}),
     burnTxHash: t.burnTxHash,
     mintTxHash: t.mintTxHash,
     errorCode: t.errorCode,

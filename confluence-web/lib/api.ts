@@ -163,3 +163,47 @@ export function transferErrorText(e: unknown): string {
   }
   return "Could not reach the Confluence API. Check your connection and try again.";
 }
+
+// ---------- transaction page (Stage 2e) ----------
+
+const EstimatedMoney = Money.extend({ estimated: z.boolean() });
+
+export const TransferDetailSchema = z.object({
+  id: z.string(),
+  quoteId: z.string(),
+  state: z.string(),
+  sourceChain: z.string(),
+  destinationChain: z.string(),
+  sender: z.string(),
+  recipient: z.string(),
+  speed: z.enum(["FAST", "SLOW"]),
+  useForwarder: z.boolean(),
+  amount: Money,
+  platformFee: Money,
+  cctpFee: EstimatedMoney.optional(),
+  forwardingFee: EstimatedMoney.optional(),
+  expectedReceive: EstimatedMoney.optional(),
+  burnTxHash: z.string().nullable(),
+  mintTxHash: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  events: z.array(
+    z.object({
+      fromState: z.string().nullable(),
+      toState: z.string(),
+      source: z.string(),
+      detail: z.unknown(),
+      createdAt: z.string(),
+    }),
+  ),
+});
+export type TransferDetail = z.infer<typeof TransferDetailSchema>;
+
+/** Public read of a transfer. Returns null when it does not exist. */
+export async function fetchTransfer(id: string): Promise<TransferDetail | null> {
+  const res = await fetch(`${publicEnv.apiUrl}/transfers/${encodeURIComponent(id)}`, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) throw await readError(res);
+  return TransferDetailSchema.parse(await res.json());
+}

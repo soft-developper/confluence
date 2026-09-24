@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import type { Quote } from "@/lib/api";
 import { shortAddress, type BridgeChain } from "@/lib/chains";
@@ -156,7 +157,17 @@ export function ReviewPanel(p: ReviewPanelProps) {
         <h1 ref={headingRef} tabIndex={-1} id="bridge-title" className="text-[22px] font-medium outline-none">
           {title}
         </h1>
-        {t && <span className="font-mono text-xs text-ink-muted">Bridge #{t.id.slice(0, 6).toUpperCase()}</span>}
+        {t && (
+          <Link
+            href={`/tx/${t.id}`}
+            target="_blank"
+            rel="noopener"
+            className="flex items-center gap-1 font-mono text-xs text-action-text"
+            aria-label={`View transaction Bridge #${t.id.slice(0, 6).toUpperCase()} in a new tab`}
+          >
+            Bridge #{t.id.slice(0, 6).toUpperCase()} {Icon.external}
+          </Link>
+        )}
       </div>
 
       {/* Route */}
@@ -309,6 +320,11 @@ export function ReviewPanel(p: ReviewPanelProps) {
             </div>
           )}
 
+          {t && (
+            <Link href={`/tx/${t.id}`} target="_blank" rel="noopener" className="self-center text-sm text-action-text">
+              View transaction
+            </Link>
+          )}
           {busy && <p className="text-center text-xs text-ink-muted">Keep this page open until the bridge finishes.</p>}
         </>
       )}

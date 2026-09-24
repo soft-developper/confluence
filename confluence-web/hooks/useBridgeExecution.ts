@@ -5,6 +5,7 @@ import type { EIP1193Provider } from "viem";
 import type { BridgeChain as KitChain, BridgeResult, BridgeStep, BridgeWarning } from "@circle-fin/app-kit";
 import { ApiError, postTransfer, postTransferEvent, transferErrorText, type CreatedTransfer, type Quote, type StepReportBody } from "@/lib/api";
 import { loadBridgeKit, type LoadedBridgeKit } from "@/lib/bridgeKit";
+import { saveTransferToken } from "@/lib/transferToken";
 import type { BridgeChain } from "@/lib/chains";
 
 /** The four stages shown to the user. reAttest is shown as the attestation stage. */
@@ -268,6 +269,7 @@ export function useBridgeExecution() {
         return;
       }
       transferRef.current = transfer;
+      saveTransferToken(transfer.id, transfer.reportToken);
       routeRef.current = { to: args.to, forwarded: transfer.useForwarder };
       setState((s) => ({ ...s, transfer }));
 
