@@ -15,6 +15,9 @@ import { ChainDot } from "./ChainDot";
 import { ChainPicker } from "./ChainPicker";
 import { ReviewPanel } from "./ReviewPanel";
 import { GasWarning } from "./GasWarning";
+import { RecipientField } from "@/components/recipient/RecipientField";
+import { RecipientWarnings, useRecipientChecks } from "@/components/recipient/RecipientChecks";
+import { useAddressBook } from "@/lib/addressBook";
 import { estimateSourceGas } from "@/lib/sourceGas";
 
 const AMOUNT_INPUT = /^(\d{0,12})(\.\d{0,6})?$/;
@@ -201,6 +204,11 @@ export function BridgeCard() {
     if (execPhase === "success") void refetchBalance();
   }, [execPhase, refetchBalance]);
 
+  // Recipient safety checks (warn only) and address book labels.
+  const activeRecipient = recipientOn && isAddress(recipient) ? recipient : undefined;
+  const recipientChecks = useRecipientChecks(address, activeRecipient, to);
+  const book = useAddressBook(address);
+
   // Source-chain native gas (approve and burn). CCTP never pays it, so warn when low.
   const sourceGas = useBalance({ address, chainId: from?.evmChainId, query: { enabled: !!address && !!from } });
   const gasQuote = execPhase === "idle" ? quote : undefined;
@@ -326,6 +334,12 @@ export function BridgeCard() {
           switching={switching}
           onSwitch={() => switchChain({ chainId: from.evmChainId })}
           destinationGas={destGas.data?.value}
+          recipientLabel={book.labelOf(reviewQuote.recipient)}
+          recipientWarning={
+            to && reviewQuote.recipient.toLowerCase() !== address.toLowerCase() ? (
+              <RecipientWarnings checks={recipientChecks} destination={to} />
+            ) : null
+          }
           sourceGasWarning={
             execPhase === "idle" ? <GasWarning chain={from} balanceWei={sourceGas.data?.value} estimate={gasEstimate.data} /> : null
           }
@@ -515,26 +529,8 @@ export function BridgeCard() {
             />
             {recipientOn && (
               <>
-                <label htmlFor="recipient" className="text-[13px] font-medium text-ink-muted">
-                  Recipient on {to?.name}
-                </label>
-                <input
-                  id="recipient"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value.trim())}
-                  placeholder="0x..."
-                  autoComplete="off"
-                  spellCheck={false}
-                  aria-invalid={recipient.length > 0 && !isAddress(recipient)}
-                  className={`h-11 rounded-md border bg-bg px-3 font-mono text-xs outline-none ${
-                    recipient.length > 0 && !isAddress(recipient) ? "border-danger" : "border-border-control focus:border-action-text"
-                  }`}
-                />
-                {recipient.length > 0 && (
-                  <span className={`text-xs ${isAddress(recipient) ? "text-destination-text" : "text-danger"}`}>
-                    {isAddress(recipient) ? "Valid address format" : "Not a valid EVM address"}
-                  </span>
-                )}
+                <RecipientField owner={address} value={recipient} onChange={setRecipient} destination={to} />
+                {to && <RecipientWarnings checks={recipientChecks} destination={to} />}
               </>
             )}
           </div>

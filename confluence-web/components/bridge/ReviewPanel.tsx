@@ -80,6 +80,10 @@ export interface ReviewPanelProps {
   onSwitch: () => void;
   /** Native gas balance on the destination (base units), when the user mints themselves. */
   destinationGas: bigint | undefined;
+  /** Saved address book name for the recipient, if any. */
+  recipientLabel?: string | undefined;
+  /** Recipient safety notices (warn only), rendered before signing. */
+  recipientWarning?: React.ReactNode;
   /** Source-chain gas notice (warn only), rendered before signing. */
   sourceGasWarning?: React.ReactNode;
   onBack: () => void;
@@ -218,12 +222,22 @@ export function ReviewPanel(p: ReviewPanelProps) {
           <div className="flex flex-col gap-2">
             <Row label="Speed" value={`${speed === "FAST" ? "Fast" : "Standard"}${quote.eta ? `, ${quote.eta}` : ""}`} />
             <Row label="Forwarding" value={forwarding ? "On" : "Off"} />
-            <Row label="Recipient" value={selfRecipient ? `Your wallet, ${shortAddress(recipient)}` : shortAddress(recipient)} />
+            <Row
+              label="Recipient"
+              value={
+                selfRecipient
+                  ? `Your wallet, ${shortAddress(recipient)}`
+                  : p.recipientLabel
+                    ? `${p.recipientLabel}, ${shortAddress(recipient)}`
+                    : shortAddress(recipient)
+              }
+            />
           </div>
           <div className="flex items-start gap-2.5 rounded-md border border-border bg-bg p-3 text-[13px] text-ink-muted">
             <span className="mt-px shrink-0 text-action-text">{Icon.info}</span>
             <span>{signNote}</span>
           </div>
+          {p.recipientWarning}
           {p.sourceGasWarning}
           {noGas && (
             <div role="status" className="rounded-md border border-warning bg-bg p-3 text-[13px]">
