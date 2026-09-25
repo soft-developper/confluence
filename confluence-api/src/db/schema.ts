@@ -125,3 +125,66 @@ export const idempotencyKeys = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.scope, t.key] }), index("idempotency_keys_expires_idx").on(t.expiresAt)],
 );
+
+// ---------- swaps (Stage 6a) ----------
+
+export const SWAP_STATES = ["CREATED", "SUBMITTED", "COMPLETED", "FAILED"] as const;
+export type SwapState = (typeof SWAP_STATES)[number];
+
+/**
+ * Same-chain swaps executed in the browser with App Kit (keyless). Token amounts are
+ * stored human-readable exactly as App Kit uses them (tokens have different decimals).
+ */
+export const swaps = sqliteTable(
+  "swaps",
+  {
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    state: text("state", { enum: SWAP_STATES }).notNull(),
+    chain: text("chain").notNull(),
+    sender: text("sender").notNull(),
+    recipient: text("recipient").notNull(),
+    tokenIn: text("token_in").notNull(),
+    tokenOut: text("token_out").notNull(),
+    amountIn: text("amount_in").notNull(),
+    feeRecipient: text("fee_recipient").notNull(),
+    // What our backend calculated (computeFee asked POST /swaps/fee) and on which side.
+    feeSide: text("fee_side", { enum: ["input", "output"] }),
+    feeToken: text("fee_token"),
+    feeExpected: text("fee_expected"),
+    // What Circle's swap result reported as the developer fee.
+    feeCharged: text("fee_charged"),
+    estimatedOut: text("estimated_out"),
+    minOut: text("min_out"),
+    amountOut: text("amount_out"),
+    approvalTxHash: text("approval_tx_hash"),
+    swapTxHash: text("swap_tx_hash"),
+    errorCode: text("error_code"),
+    reportTokenHash: text("report_token_hash"),
+    trackedAt: integer("tracked_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
+  },
+  (t) => [
+    uniqueIndex("swaps_idempotency_key_uq").on(t.idempotencyKey),
+    uniqueIndex("swaps_swap_tx_hash_uq").on(t.swapTxHash),
+    index("swaps_sender_idx").on(t.sender),
+    index("swaps_state_idx").on(t.state),
+  ],
+);
+
+export const swapEvents = sqliteTable(
+  "swap_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    swapId: text("swap_id")
+      .notNull()
+      .references(() => swaps.id),
+    fromState: text("from_state", { enum: SWAP_STATES }),
+    toState: text("to_state", { enum: SWAP_STATES }).notNull(),
+    source: text("source", { enum: ["client", "worker"] }).notNull(),
+    detail: text("detail", { mode: "json" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("swap_events_swap_idx").on(t.swapId)],
+);

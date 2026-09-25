@@ -1,3 +1,4 @@
+import { AppKit } from "@circle-fin/app-kit";
 import { loadConfig, type Config } from "./config.js";
 import { createApp } from "./app.js";
 import { createDb } from "./db/client.js";
@@ -30,7 +31,17 @@ const iris = new IrisClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], circleLimiter)
 
 if (config.TRACKER_ENABLED) {
   const messages = new IrisMessagesClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], circleLimiter);
-  startTracker({ db, registry, messages }, config.TRACKER_INTERVAL_MS);
+  const swapKit = new AppKit();
+  startTracker(
+    {
+      db,
+      registry,
+      messages,
+      // Permissionless status lookup (no key): https://www.npmjs.com/package/@circle-fin/app-kit
+      getSwapStatus: async (txHash, chain) => ({ status: (await swapKit.getSwapStatus({ txHash, chainIn: chain as never })).progress.status }),
+    },
+    config.TRACKER_INTERVAL_MS,
+  );
   console.log(`tracker: on, every ${Math.round(config.TRACKER_INTERVAL_MS / 1000)}s while awake`);
 } else {
   console.log("tracker: off (TRACKER_ENABLED=false)");

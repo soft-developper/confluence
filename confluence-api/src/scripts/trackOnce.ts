@@ -9,6 +9,8 @@ import { loadConfig } from "../config.js";
 import { createDb } from "../db/client.js";
 import { TokenBucket } from "../lib/tokenBucket.js";
 import { trackOnce } from "../tracker/tracker.js";
+import { trackSwapsOnce } from "../tracker/swaps.js";
+import { AppKit } from "@circle-fin/app-kit";
 
 async function main() {
   try {
@@ -22,7 +24,14 @@ async function main() {
   const limiter = new TokenBucket(config.CIRCLE_MAX_RPS * 2, config.CIRCLE_MAX_RPS);
   const messages = new IrisMessagesClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], limiter);
   const r = await trackOnce({ db, registry, messages, log: (m) => console.log(m) });
-  console.log(`[${config.CONFLUENCE_ENV}] checked ${r.checked}, moved ${r.moved}, errors ${r.errors}`);
+  console.log(`[${config.CONFLUENCE_ENV}] transfers: checked ${r.checked}, moved ${r.moved}, errors ${r.errors}`);
+  const kit = new AppKit();
+  const s = await trackSwapsOnce({
+    db,
+    getSwapStatus: async (txHash, chain) => ({ status: (await kit.getSwapStatus({ txHash, chainIn: chain as never })).progress.status }),
+    log: (m) => console.log(m),
+  });
+  console.log(`[${config.CONFLUENCE_ENV}] swaps: checked ${s.checked}, moved ${s.moved}, errors ${s.errors}`);
   db.$client.close();
 }
 

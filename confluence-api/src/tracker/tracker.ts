@@ -5,6 +5,7 @@ import type { Db } from "../db/client.js";
 import { transferEvents, transfers } from "../db/schema.js";
 import { isNonceUsed } from "./chainReads.js";
 import { decide, recheckAfterMs, STOP_CODES, type Decision } from "./decide.js";
+import { trackSwapsOnce, type SwapStatusFn } from "./swaps.js";
 
 export interface TrackerDeps {
   db: Db;
@@ -12,6 +13,8 @@ export interface TrackerDeps {
   messages: IrisMessagesClient;
   fetchImpl?: typeof fetch;
   log?: (msg: string) => void;
+  /** Stage 6a: App Kit getSwapStatus; when set, each pass also settles swaps. */
+  getSwapStatus?: SwapStatusFn;
 }
 
 export interface PassResult {
@@ -141,6 +144,10 @@ export function startTracker(deps: TrackerDeps, intervalMs: number): () => void 
     try {
       const r = await trackOnce({ ...deps, log });
       if (r.checked > 0) log(`tracker: pass checked ${r.checked}, moved ${r.moved}, errors ${r.errors}`);
+      if (deps.getSwapStatus) {
+        const s = await trackSwapsOnce({ db: deps.db, getSwapStatus: deps.getSwapStatus, log });
+        if (s.checked > 0) log(`tracker: swaps checked ${s.checked}, moved ${s.moved}, errors ${s.errors}`);
+      }
     } catch (e) {
       log(`tracker: pass failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

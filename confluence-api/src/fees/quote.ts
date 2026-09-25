@@ -31,7 +31,7 @@ export class QuoteError extends Error {
 
 const money = (base: bigint) => ({ base: base.toString(), usdc: formatUsdc(base) });
 
-async function activeFeeRecipient(db: Db, chainId: string): Promise<string | null> {
+export async function activeFeeRecipient(db: Db, chainId: string): Promise<string | null> {
   const row = await db.query.feeRecipients.findFirst({
     where: and(eq(feeRecipients.chain, chainId), lte(feeRecipients.effectiveFrom, new Date())),
     orderBy: desc(feeRecipients.effectiveFrom),

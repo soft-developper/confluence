@@ -8,10 +8,18 @@ import { chainsRouter } from "./routes/chains.js";
 import { quotesRouter } from "./routes/quotes.js";
 import { feesRouter } from "./routes/fees.js";
 import { REPORT_TOKEN_HEADER, transfersRouter } from "./routes/transfers.js";
+import { swapsRouter } from "./routes/swaps.js";
+import { buildSwapRegistry, type SwapRegistry } from "./swaps/tokens.js";
 import type { IrisClient } from "./circle/iris.js";
 import type { ChainRegistry } from "./chains/registry.js";
 
-export function createApp(config: Config, db: Db, registry: ChainRegistry, iris: IrisClient) {
+export function createApp(
+  config: Config,
+  db: Db,
+  registry: ChainRegistry,
+  iris: IrisClient,
+  swapRegistry: SwapRegistry = buildSwapRegistry(config),
+) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", config.TRUST_PROXY_HOPS);
@@ -49,6 +57,7 @@ export function createApp(config: Config, db: Db, registry: ChainRegistry, iris:
   app.use(quotesRouter(db, registry, iris));
   app.use(feesRouter());
   app.use(transfersRouter(db));
+  app.use(swapsRouter(db, swapRegistry));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });
