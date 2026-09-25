@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { getAddress, isAddress } from "viem";
 import type { Db } from "../db/client.js";
 import { accounts, addressBookEntries, swaps, transfers } from "../db/schema.js";
@@ -92,6 +92,11 @@ export async function lookupId(db: Db, raw: string) {
 
 export interface HistoryItem {
   kind: "bridge" | "swap";
+  /** Stage 8a: "in" = someone paid this wallet (it is the recipient, not the sender). */
+  direction: "out" | "in";
+  /** The other side: recipient for outgoing, sender for incoming (null for own-wallet moves). */
+  counterparty: string | null;
+  counterpartyId: string | null;
   id: string;
   state: string;
   createdAt: string;
@@ -109,7 +114,8 @@ export interface HistoryItem {
 /** The signed-in wallet's bridges and swaps, newest first; `before` pages backwards. */
 export async function history(db: Db, address: string, opts: { limit: number; before?: Date | undefined }) {
   const lim = Math.min(Math.max(opts.limit, 1), 50);
-  const owner = sql`lower(${transfers.sender}) = ${address}`;
+  // Outgoing (this wallet sent) and incoming (this wallet was paid).
+  const owner = or(sql`lower(${transfers.sender}) = ${address}`, sql`lower(${transfers.recipient}) = ${address}`)!;
   const t = await db
     .select()
     .from(transfers)
@@ -123,9 +129,22 @@ export async function history(db: Db, address: string, opts: { limit: number; be
     .where(opts.before ? and(swapOwner, lt(swaps.createdAt, opts.before)) : swapOwner)
     .orderBy(desc(swaps.createdAt))
     .limit(lim);
+  // Confluence IDs of people who paid this wallet.
+  const payers = [...new Set(t.filter((x) => x.sender.toLowerCase() !== address).map((x) => x.sender.toLowerCase()))];
+  const payerIds = new Map(
+    payers.length
+      ? (await db.select({ a: accounts.address, id: accounts.confluenceId }).from(accounts).where(inArray(accounts.address, payers))).map((r) => [r.a, r.id])
+      : [],
+  );
   const items: (HistoryItem & { at: number })[] = [
-    ...t.map((x) => ({
+    ...t.map((x) => {
+      const incoming = x.sender.toLowerCase() !== address;
+      const self = x.recipient.toLowerCase() === x.sender.toLowerCase();
+      return {
       kind: "bridge" as const,
+      direction: incoming ? ("in" as const) : ("out" as const),
+      counterparty: self ? null : incoming ? getAddress(x.sender) : getAddress(x.recipient),
+      counterpartyId: self ? null : incoming ? (payerIds.get(x.sender.toLowerCase()) ?? null) : x.recipientId,
       id: x.id,
       state: x.state,
       at: x.createdAt.getTime(),
@@ -139,9 +158,13 @@ export async function history(db: Db, address: string, opts: { limit: number; be
       recipient: x.recipient,
       txHash: x.burnTxHash,
       errorCode: x.errorCode,
-    })),
+      };
+    }),
     ...s.map((x) => ({
       kind: "swap" as const,
+      direction: "out" as const,
+      counterparty: x.recipient.toLowerCase() === x.sender.toLowerCase() ? null : getAddress(x.recipient),
+      counterpartyId: null,
       id: x.id,
       state: x.state,
       at: x.createdAt.getTime(),

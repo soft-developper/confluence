@@ -14,6 +14,7 @@ const QuoteBody = z.object({
   amount: z.string().min(1).max(24),
   sender: address,
   recipient: address.optional(),
+  recipientId: z.string().min(1).max(40).optional(),
   speed: z.enum(["FAST", "SLOW"]),
   useForwarder: z.boolean(),
 });

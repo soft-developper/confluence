@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, lte } from "drizzle-orm";
 import type { BridgeChain, ChainRegistry } from "../chains/registry.js";
+import { getAddress } from "viem";
+import { idProblem, normalizeId } from "../accounts/service.js";
 import type { IrisClient } from "../circle/iris.js";
 import type { Db } from "../db/client.js";
-import { feeRecipients, quotes } from "../db/schema.js";
+import { accounts, feeRecipients, quotes } from "../db/schema.js";
 import { formatUsdc, mulDivCeil, parseUsdc } from "../lib/usdc.js";
 import { calculatePlatformFee, netPlatformFee } from "./platformFee.js";
 
@@ -15,6 +17,8 @@ export interface QuoteInput {
   amount: string; // human USDC, e.g. "1000.50"
   sender: string;
   recipient?: string | undefined;
+  /** Stage 8a: pay a Confluence ID; resolved here, never trusted from the browser. */
+  recipientId?: string | undefined;
   speed: "FAST" | "SLOW";
   useForwarder: boolean;
 }
@@ -91,7 +95,16 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
 
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + QUOTE_TTL_MS);
-  const recipient = input.recipient ?? input.sender;
+  let recipient = input.recipient ?? input.sender;
+  let recipientId: string | null = null;
+  if (input.recipientId !== undefined) {
+    if (input.recipient) throw new QuoteError(400, "recipient_conflict", "send either recipient or recipientId, not both");
+    const handle = normalizeId(input.recipientId);
+    const acct = idProblem(handle) ? undefined : await db.query.accounts.findFirst({ where: eq(accounts.confluenceId, handle) });
+    if (!acct) throw new QuoteError(404, "id_not_found", `@${handle} is not a Confluence ID`);
+    recipient = getAddress(acct.address);
+    recipientId = handle;
+  }
 
   await db.insert(quotes).values({
     id,
@@ -99,6 +112,7 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     destinationChain: destination.id,
     sender: input.sender,
     recipient,
+    recipientId,
     amountBase: amount.toString(),
     platformFeeBase: platformFee.toString(),
     cctpFeeBase: cctpFee.toString(),
@@ -116,6 +130,7 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     destinationChain: destination.id,
     sender: input.sender,
     recipient,
+    recipientId,
     speed: input.speed,
     useForwarder: input.useForwarder,
     eta: (input.speed === "FAST" ? source.speed?.fast : source.speed?.standard)?.label ?? null,

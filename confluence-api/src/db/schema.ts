@@ -35,6 +35,8 @@ export const quotes = sqliteTable(
     destinationChain: text("destination_chain").notNull(),
     sender: text("sender").notNull(),
     recipient: text("recipient").notNull(),
+    // Stage 8a: the Confluence ID the payer chose; the API resolved it to `recipient`.
+    recipientId: text("recipient_id"),
     amountBase: text("amount_base").notNull(),
     platformFeeBase: text("platform_fee_base").notNull(),
     cctpFeeBase: text("cctp_fee_base").notNull(),
@@ -59,6 +61,8 @@ export const transfers = sqliteTable(
     destinationChain: text("destination_chain").notNull(),
     sender: text("sender").notNull(),
     recipient: text("recipient").notNull(),
+    // Stage 8a: copied from the quote.
+    recipientId: text("recipient_id"),
     amountBase: text("amount_base").notNull(),
     platformFeeBase: text("platform_fee_base").notNull(),
     speed: text("speed", { enum: TRANSFER_SPEEDS }).notNull(),
