@@ -4,10 +4,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { EnvBadge } from "@/components/EnvBadge";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { NavTabs } from "@/components/NavTabs";
+import { SessionSync } from "@/components/SessionSync";
 
 export function AppHeader() {
   return (
     <header className="flex flex-col border-b border-border">
+      {/* Address book sync while signed in; renders nothing. */}
+      <SessionSync />
       <div className="flex h-18 items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex items-center gap-2.5">
           <Link

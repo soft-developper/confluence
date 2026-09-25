@@ -51,9 +51,11 @@ function read(owner: `0x${string}`): BookFile {
     if (f.version !== 1 || !Array.isArray(f.entries) || !Array.isArray(f.recents)) return empty(owner);
     // Drop anything malformed rather than failing the whole list.
     const entries = f.entries.filter(
-      (e): e is SavedAddress => !!e && typeof e.id === "string" && typeof e.label === "string" && isAddress(String(e.address)),
+      (e): e is SavedAddress => !!e && typeof e.id === "string" && typeof e.label === "string" && isAddress(String(e.address), { strict: false }),
     );
-    const recents = f.recents.filter((r): r is RecentRecipient => !!r && isAddress(String(r.address)) && typeof r.lastUsedAt === "string");
+    const recents = f.recents.filter(
+      (r): r is RecentRecipient => !!r && isAddress(String(r.address), { strict: false }) && typeof r.lastUsedAt === "string",
+    );
     return { version: 1, owner, entries, recents };
   } catch {
     return empty(owner);
@@ -126,6 +128,32 @@ export function removeRecent(owner: `0x${string}`, address: string): void {
   const f = read(owner);
   f.recents = f.recents.filter((r) => r.address.toLowerCase() !== address.toLowerCase());
   write(f);
+}
+
+// ---------- server sync (Stage 7b) ----------
+
+/** Every entry including deletion markers, for upload to PUT /me/address-book. */
+export function exportEntries(owner: `0x${string}`): SavedAddress[] {
+  return read(owner).entries;
+}
+
+/**
+ * Adopts the server's merged list (newest updatedAt already won per address on the
+ * server). Recents stay local. Returns false when storage is blocked.
+ */
+export function importEntries(owner: `0x${string}`, server: SavedAddress[]): boolean {
+  const f = read(owner);
+  const cur = JSON.stringify(f.entries);
+  const next = server.filter((e) => isAddress(e.address, { strict: false }));
+  if (JSON.stringify(next) === cur) return true; // nothing changed: no event, no re-render loop
+  f.entries = next.map((e) => ({ ...e, address: getAddress(e.address) }));
+  return write(f);
+}
+
+/** Subscribe to local address book changes (for debounced uploads). */
+export function onAddressBookChange(cb: () => void): () => void {
+  window.addEventListener(CHANGE_EVENT, cb);
+  return () => window.removeEventListener(CHANGE_EVENT, cb);
 }
 
 // ---------- React binding ----------

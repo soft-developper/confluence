@@ -309,3 +309,102 @@ export async function postSwapEvent(id: string, token: string, body: SwapReportB
   if (!res.ok) throw await readError(res);
   return (await res.json()) as { state: string; fee?: string };
 }
+
+// ---------- accounts and sign-in (Stage 7) ----------
+
+/** Thrown when the session is missing, expired or revoked (HTTP 401). */
+export class SessionExpiredError extends Error {}
+
+async function authed(token: string, path: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(`${publicEnv.apiUrl}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (res.status === 401) throw new SessionExpiredError("session expired");
+  if (!res.ok) throw await readError(res);
+  return res;
+}
+
+export async function fetchNonce(): Promise<string> {
+  const res = await fetch(`${publicEnv.apiUrl}/auth/nonce`, { cache: "no-store" });
+  if (!res.ok) throw await readError(res);
+  return z.object({ nonce: z.string() }).parse(await res.json()).nonce;
+}
+
+export async function verifySignIn(message: string, signature: string) {
+  const res = await fetch(`${publicEnv.apiUrl}/auth/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, signature }),
+  });
+  if (!res.ok) throw await readError(res);
+  return z.object({ token: z.string(), address: z.string(), expiresAt: z.string() }).parse(await res.json());
+}
+
+export const AccountSchema = z.object({
+  address: z.string(),
+  confluenceId: z.string().nullable(),
+  idClaimedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type Account = z.infer<typeof AccountSchema>;
+
+export async function fetchMe(token: string): Promise<Account> {
+  return AccountSchema.parse(await (await authed(token, "/me")).json());
+}
+
+export async function claimConfluenceId(token: string, handle: string): Promise<Account> {
+  return AccountSchema.parse(await (await authed(token, "/me/id", { method: "POST", body: JSON.stringify({ handle }) })).json());
+}
+
+export async function checkIdAvailability(handle: string) {
+  const res = await fetch(`${publicEnv.apiUrl}/ids/${encodeURIComponent(handle)}/availability`);
+  if (!res.ok) throw await readError(res);
+  return z.object({ handle: z.string(), available: z.boolean(), reason: z.string().nullable() }).parse(await res.json());
+}
+
+export const HistoryItemSchema = z.object({
+  kind: z.enum(["bridge", "swap"]),
+  id: z.string(),
+  state: z.string(),
+  createdAt: z.string(),
+  sourceChain: z.string(),
+  destinationChain: z.string().nullable(),
+  amountIn: z.string(),
+  tokenIn: z.string(),
+  tokenOut: z.string(),
+  amountOut: z.string().nullable(),
+  recipient: z.string(),
+  txHash: z.string().nullable(),
+  errorCode: z.string().nullable(),
+});
+export type HistoryItem = z.infer<typeof HistoryItemSchema>;
+
+export async function fetchHistory(token: string, before?: string) {
+  const q = new URLSearchParams({ limit: "20", ...(before ? { before } : {}) });
+  const j = await (await authed(token, `/me/history?${q}`)).json();
+  return z.object({ items: z.array(HistoryItemSchema), nextBefore: z.string().nullable() }).parse(j);
+}
+
+const BookEntry = z.object({
+  id: z.string(),
+  address: z.string(),
+  label: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().optional(),
+});
+
+export async function syncAddressBook(token: string, entries: z.infer<typeof BookEntry>[]) {
+  const j = await (await authed(token, "/me/address-book", { method: "PUT", body: JSON.stringify({ entries }) })).json();
+  return z.object({ entries: z.array(BookEntry) }).parse(j).entries;
+}
+
+export async function signOut(token: string, everywhere = false): Promise<void> {
+  try {
+    await authed(token, everywhere ? "/auth/signout-all" : "/auth/signout", { method: "POST", body: "{}" });
+  } catch (e) {
+    if (!(e instanceof SessionExpiredError)) throw e;
+  }
+}
