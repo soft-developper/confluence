@@ -359,7 +359,16 @@ export function ReviewPanel(p: ReviewPanelProps) {
       {exec.phase === "success" && <PrimaryButton onClick={p.onDone}>Bridge again</PrimaryButton>}
       {exec.phase === "error" && exec.error && (
         <div className="flex flex-col gap-2">
-          {exec.error.canRetry ? (
+          {exec.error.forwardFailed && t ? (
+            <Link
+              href={`/tx/${t.id}`}
+              target="_blank"
+              rel="noopener"
+              className="flex h-13 w-full items-center justify-center rounded-md bg-action text-[15px] font-medium text-on-action hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text"
+            >
+              Finish on the transaction page
+            </Link>
+          ) : exec.error.canRetry ? (
             <PrimaryButton onClick={p.onRetry}>Retry</PrimaryButton>
           ) : (
             <PrimaryButton onClick={p.onConfirm}>Try again</PrimaryButton>

@@ -10,7 +10,7 @@ import { loadTransferToken } from "@/lib/transferToken";
 
 export type CompleteMintState =
   | { status: "idle" }
-  | { status: "working"; step: "loading" | "attestation" | "wallet" }
+  | { status: "working"; step: "loading" | "attestation" | "reattest" | "wallet" }
   | { status: "done"; mintTxHash?: string; explorerUrl?: string; reported: boolean }
   | { status: "error"; message: string };
 
@@ -18,10 +18,13 @@ export type CompleteMintState =
 const CCTP_PROVIDER = "CCTPV2BridgingProvider";
 
 /**
- * Submits the destination mint for a transfer that burned with forwarding off, from the
- * database row alone (the original tab may be gone). App Kit's retry continues from the
- * steps it is given: approve and burn succeeded, so it fetches the attestation for the
- * burn hash and then mints with the connected wallet on the destination chain.
+ * Submits the destination mint yourself, from the database row alone (the original tab
+ * may be gone), when forwarding was off or Circle's Forwarding Service failed (Stage 4b).
+ * App Kit's retry continues from the steps it is given: approve and burn succeeded, so it
+ * fetches the attestation for the burn hash and mints with the connected wallet on the
+ * destination chain. The rebuilt result never asks for forwarding, so App Kit runs the
+ * self-mint path, which re-attests automatically if the attestation expired
+ * (handleReAttestationAndRetry in @circle-fin/provider-cctp-v2).
  */
 export function useCompleteMint() {
   const [state, setState] = useState<CompleteMintState>({ status: "idle" });
@@ -35,7 +38,7 @@ export function useCompleteMint() {
       getProvider: () => Promise<unknown>;
     }) => {
       const { transfer: t } = args;
-      if (!t.burnTxHash || t.useForwarder) return;
+      if (!t.burnTxHash) return;
       setState({ status: "working", step: "loading" });
       try {
         const provider = (await args.getProvider()) as EIP1193Provider | undefined;
@@ -67,15 +70,26 @@ export function useCompleteMint() {
 
         const onEvent = (payload: { values?: unknown }) => {
           const v = payload.values as BridgeStep | undefined;
-          if (v?.name?.toLowerCase() === "fetchattestation" && v.state === "success") setState({ status: "working", step: "wallet" });
+          const name = v?.name?.toLowerCase();
+          if ((name === "fetchattestation" || name === "reattest") && v?.state === "success") setState({ status: "working", step: "wallet" });
+        };
+        // A mint that fails on an expired attestation triggers App Kit's re-attest; the mint
+        // step's error event arrives first, so show the re-attest wait until reAttest succeeds.
+        const onMint = (payload: { values?: unknown }) => {
+          const v = payload.values as BridgeStep | undefined;
+          if (v?.state === "error") setState({ status: "working", step: "reattest" });
         };
         kit.on("bridge.fetchAttestation", onEvent);
+        kit.on("bridge.reAttest", onEvent);
+        kit.on("bridge.mint", onMint);
         setState({ status: "working", step: "attestation" });
         let next: BridgeResult;
         try {
           next = await kit.retryBridge(result, { from: adapter, to: adapter });
         } finally {
           kit.off("bridge.fetchAttestation", onEvent);
+          kit.off("bridge.reAttest", onEvent);
+          kit.off("bridge.mint", onMint);
         }
 
         const mint = [...next.steps].reverse().find((s) => s.name.toLowerCase() === "mint");

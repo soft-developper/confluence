@@ -8,7 +8,9 @@ import { fetchTransfer, type TransferDetail } from "@/lib/api";
 import { shortAddress, type BridgeChain } from "@/lib/chains";
 import { fetchIrisMessage, FORWARD_DONE } from "@/lib/iris";
 import { isMessageReceived } from "@/lib/mintCheck";
-import { deriveTxView, PHASE_LABEL, type TxView } from "@/lib/txStatus";
+import { deriveTxView, expirationBlockOf, PHASE_LABEL, type TxView } from "@/lib/txStatus";
+import { createPublicClient, fallback, http } from "viem";
+import { toViemChain } from "@/lib/chains";
 import { useBridgeChains } from "@/components/Providers";
 import { useCompleteMint } from "@/hooks/useCompleteMint";
 import { ConnectModal } from "@/components/wallet/ConnectModal";
@@ -76,8 +78,24 @@ export function TransactionView({ id }: { id: string }) {
   const nq = useQuery({
     queryKey: ["nonce-used", to?.id, nonce],
     queryFn: () => isMessageReceived(to!, nonce),
-    enabled: liveNeeded && !!to && !t?.useForwarder && iq.data?.status === "complete",
+    // Forwarding off, or Circle's forward failed: someone may have submitted the mint.
+    enabled:
+      liveNeeded &&
+      !!to &&
+      iq.data?.status === "complete" &&
+      (!t?.useForwarder || iq.data?.forwardState === "FAILED" || t?.errorCode === "forward_failed"),
     refetchInterval: (q) => (q.state.data === true ? false : 15_000),
+  });
+
+  // Destination block number, only when the attestation has an expiry (Fast transfers).
+  const expiry = expirationBlockOf(iq.data);
+  const bq = useQuery({
+    queryKey: ["dest-block", to?.id],
+    queryFn: () =>
+      createPublicClient({ chain: toViemChain(to!), transport: fallback(to!.rpcUrls.map((u) => http(u))) }).getBlockNumber(),
+    enabled: liveNeeded && !!to && expiry !== null && nq.data !== true,
+    refetchInterval: 30_000,
+    retry: 1,
   });
 
   if (tq.isPending) return <Card><p className="text-sm text-ink-muted">Loading transfer...</p></Card>;
@@ -111,7 +129,7 @@ export function TransactionView({ id }: { id: string }) {
     );
   }
 
-  return <Loaded t={t} from={from} to={to} view={deriveTxView(t, iq.data, nq.data)} irisError={iq.isError} onMinted={() => void tq.refetch()} />;
+  return <Loaded t={t} from={from} to={to} view={deriveTxView(t, iq.data, nq.data, Date.now(), bq.data)} irisError={iq.isError} onMinted={() => void tq.refetch()} />;
 }
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -241,10 +259,10 @@ function Loaded({ t, from, to, view, irisError, onMinted }: { t: TransferDetail;
           No burn was recorded for this transfer, so no USDC left your wallet through it.
         </div>
       )}
-      {view.forwardFailed && (
+      {view.forwardFailed && !minted && (
         <div role="alert" className="rounded-md border border-warning bg-bg p-3 text-[13px]">
-          Circle reports that its Forwarding Service could not submit the mint. Your USDC is burned and safe. Recovery for this case comes with
-          tracking and recovery (Stage 4).
+          Circle reports that its Forwarding Service could not submit the mint on {to.name}. Your USDC is burned and safe.
+          {view.canCompleteMint ? " You can submit the mint yourself below." : " Waiting for Circle's attestation before you can submit it yourself."}
         </div>
       )}
       {irisError && view.burned && !minted && (
@@ -253,8 +271,15 @@ function Loaded({ t, from, to, view, irisError, onMinted }: { t: TransferDetail;
 
       {view.canCompleteMint && mint.state.status !== "done" && (
         <div className="flex flex-col gap-3 rounded-md border border-action bg-bg p-4">
+          {view.attestationExpired && (
+            <p className="text-[13px] text-ink-muted">
+              Circle&apos;s attestation for this transfer has expired. Complete mint first asks Circle for a fresh one (no signature), then asks you to
+              sign the mint.
+            </p>
+          )}
           <p className="text-[13px]">
-            Circle has attested this transfer. Submit the mint on {to.name} to receive the USDC
+            {view.forwardFailed ? "Anyone can submit this mint, so you can do it yourself. " : "Circle has attested this transfer. "}
+            Submit the mint on {to.name} to receive the USDC
             {t.recipient.toLowerCase() !== t.sender.toLowerCase() ? ` at ${shortAddress(t.recipient)}` : ""}. Your wallet switches to {to.name} and
             asks you to sign once; gas is paid in {to.nativeCurrency.symbol}.
           </p>
@@ -278,7 +303,9 @@ function Loaded({ t, from, to, view, irisError, onMinted }: { t: TransferDetail;
               {working
                 ? mint.state.status === "working" && mint.state.step === "wallet"
                   ? "Confirm in wallet"
-                  : "Preparing mint..."
+                  : mint.state.status === "working" && mint.state.step === "reattest"
+                    ? "Getting a fresh attestation..."
+                    : "Completing mint, confirm in your wallet when asked"
                 : mint.state.status === "error"
                   ? "Try again"
                   : `Complete mint on ${to.name}`}

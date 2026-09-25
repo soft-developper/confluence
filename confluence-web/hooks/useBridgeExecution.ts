@@ -27,6 +27,8 @@ export interface ExecutionError {
   afterBurn: boolean;
   /** A retry of the same transfer is possible (App Kit retryBridge). */
   canRetry: boolean;
+  /** Circle's Forwarding Service failed the mint: finish with Complete mint on the transaction page. */
+  forwardFailed?: boolean;
 }
 
 export interface ExecutionState {
@@ -204,18 +206,26 @@ export function useBridgeExecution() {
       const stage = failed ? KNOWN_STEPS[failed.name.toLowerCase()]?.stage : undefined;
       const afterBurn = result.steps.some((st) => st.name.toLowerCase() === "burn" && st.state === "success");
       const route = routeRef.current;
+      // App Kit's RELAYER_FORWARD_FAILED ("Circle relayer failed to forward the mint transaction").
+      // FAILED is final at Circle, so retrying the forwarded flow cannot help; the transaction
+      // page submits the mint with the user's wallet instead (Stage 4b).
+      const forwardFailed =
+        stage === "mint" && !!route?.forwarded && /relayer failed to forward/i.test(failed?.errorMessage ?? "");
       setState((s) => ({
         ...s,
         phase: "error",
         warnings,
         error: {
-          message: route
+          message: forwardFailed
+            ? `Circle's Forwarding Service could not submit the mint on ${route!.to.name}. Your USDC is burned and safe. Open the transaction page to submit the mint yourself.`
+            : route
             ? errorText(stage, failed ? categorize(failed) : undefined, failed?.errorMessage, afterBurn, route.to, route.forwarded)
             : failed?.errorMessage ?? "The bridge did not complete.",
           afterBurn,
           // Before the burn nothing is on chain, so a retry is a fresh start (new quote and
           // transfer). After the burn, retryBridge continues the same transfer.
-          canRetry: afterBurn,
+          canRetry: afterBurn && !forwardFailed,
+          forwardFailed,
         },
       }));
     },

@@ -109,7 +109,11 @@ export async function trackOnce(deps: TrackerDeps, now = Date.now()): Promise<Pa
       }
       result.moved++;
       result.moves.push({ id: r.id, from: r.state, to: decision.to, reason: decision.reason });
-      log(`tracker: ${r.id.slice(0, 8)} ${r.state} -> ${decision.to} (${decision.reason})`);
+      log(
+        decision.to === r.state
+          ? `tracker: ${r.id.slice(0, 8)} stays ${r.state}, error code set to ${decision.errorCode ?? "none"} (${decision.reason})`
+          : `tracker: ${r.id.slice(0, 8)} ${r.state} -> ${decision.to} (${decision.reason})`,
+      );
     } catch (e) {
       result.errors++;
       log(`tracker: ${r.id.slice(0, 8)} check failed: ${e instanceof Error ? e.message : String(e)}`);
