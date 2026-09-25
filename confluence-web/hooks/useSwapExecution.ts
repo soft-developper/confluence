@@ -13,6 +13,9 @@ export interface SwapRun {
   swap?: CreatedSwap;
   approvalTx?: string;
   swapTx?: string;
+  /** Stage 6b: cross-chain delivery in progress / delivered on the destination. */
+  delivering?: boolean;
+  destinationTx?: string;
   explorerUrl?: string;
   amountOut?: string;
   fee?: { token: string; amount: string };
@@ -21,6 +24,8 @@ export interface SwapRun {
 
 export interface StartSwapArgs {
   chain: string;
+  /** Stage 6b: set for a cross-chain swap. */
+  destinationChain?: string;
   sender: `0x${string}`;
   tokenIn: SwapTokenSymbol;
   tokenOut: SwapTokenSymbol;
@@ -49,7 +54,14 @@ export function useSwapExecution() {
       let swap: CreatedSwap;
       try {
         swap = await postSwap(
-          { chain: a.chain, sender: a.sender, tokenIn: a.tokenIn, tokenOut: a.tokenOut, amountIn: a.amountIn },
+          {
+            chain: a.chain,
+            ...(a.destinationChain ? { destinationChain: a.destinationChain } : {}),
+            sender: a.sender,
+            tokenIn: a.tokenIn,
+            tokenOut: a.tokenOut,
+            amountIn: a.amountIn,
+          },
           crypto.randomUUID(),
         );
       } catch (e) {
@@ -94,6 +106,7 @@ export function useSwapExecution() {
         try {
           result = await kit.swap({
             from: { adapter, chain: a.chain as never },
+            ...(a.destinationChain ? { to: { chain: a.destinationChain as never, recipientAddress: a.sender } } : {}),
             tokenIn: a.tokenIn,
             tokenOut: a.tokenOut,
             amountIn: a.amountIn,
@@ -129,14 +142,63 @@ export function useSwapExecution() {
           ...(result.amountOut && /^\d+(\.\d+)?$/.test(result.amountOut) ? { amountOut: result.amountOut } : {}),
           ...(fee && /^\d+(\.\d+)?$/.test(fee.amount) ? { developerFee: fee.amount } : {}),
         });
+        if (status !== "PENDING") {
+          setRun((r) => ({
+            ...r,
+            phase: status === "FAILED" ? "error" : "success",
+            swapTx,
+            ...(result.explorerUrl ? { explorerUrl: result.explorerUrl } : {}),
+            ...(result.amountOut ? { amountOut: result.amountOut } : {}),
+            ...(fee ? { fee } : {}),
+            ...(status === "FAILED" ? { error: "Circle reports the swap failed. No output was received." } : {}),
+          }));
+          return;
+        }
+
+        // Cross-chain: kit.swap returns while delivery is in progress. App Kit's docs say to
+        // poll getSwapStatus for the destination leg until the status is terminal. If the tab
+        // closes, the tracker (Stage 6a-1) finishes the row from the same status.
         setRun((r) => ({
           ...r,
-          phase: status === "FAILED" ? "error" : "success",
           swapTx,
+          delivering: true,
           ...(result.explorerUrl ? { explorerUrl: result.explorerUrl } : {}),
-          ...(result.amountOut ? { amountOut: result.amountOut } : {}),
           ...(fee ? { fee } : {}),
-          ...(status === "FAILED" ? { error: "Circle reports the swap failed. No output was received." } : {}),
+        }));
+        const deadline = Date.now() + 45 * 60_000;
+        for (;;) {
+          await new Promise((res) => setTimeout(res, 6_000));
+          let st;
+          try {
+            st = await kit.getSwapStatus({
+              txHash: swapTx,
+              chainIn: a.chain as never,
+              ...(a.destinationChain ? { chainOut: a.destinationChain as never } : {}),
+            });
+          } catch {
+            if (Date.now() > deadline) break;
+            continue;
+          }
+          const s2 = st.progress.status;
+          if (s2 === "DONE" || s2 === "FAILED") {
+            const destTx = st.destination?.txHash;
+            await report({ step: "result", status: s2, ...(destTx && /^0x[0-9a-fA-F]{64}$/.test(destTx) ? { destinationTxHash: destTx } : {}) });
+            setRun((r) => ({
+              ...r,
+              delivering: false,
+              phase: s2 === "DONE" ? "success" : "error",
+              ...(destTx ? { destinationTx: destTx } : {}),
+              ...(s2 === "FAILED" ? { error: "Circle reports the cross-chain swap failed. Check the source transaction." } : {}),
+            }));
+            return;
+          }
+          if (Date.now() > deadline) break;
+        }
+        setRun((r) => ({
+          ...r,
+          delivering: false,
+          phase: "error",
+          error: "Delivery is taking longer than usual. The swap is on its way; Confluence keeps tracking it.",
         }));
       } catch (e) {
         await report({ step: "error", errorCategory: "swap_error", errorMessage: String(e instanceof Error ? e.message : e).slice(0, 500) });

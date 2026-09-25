@@ -7,7 +7,11 @@ import { recheckAfterMs } from "./decide.js";
  * Stage 6a: the tracker also settles swaps. Submitted swaps are checked with App Kit's
  * getSwapStatus (permissionless); swaps that never got a transaction expire after 24h.
  */
-export type SwapStatusFn = (txHash: string, chain: string) => Promise<{ status: "PENDING" | "DONE" | "FAILED" | "NOT_FOUND" }>;
+export type SwapStatusFn = (
+  txHash: string,
+  chainIn: string,
+  chainOut?: string,
+) => Promise<{ status: "PENDING" | "DONE" | "FAILED" | "NOT_FOUND"; destinationTxHash?: string | undefined }>;
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_PER_PASS = 20;
@@ -52,7 +56,8 @@ export async function trackSwapsOnce(
   for (const r of due) {
     out.checked++;
     try {
-      const status = r.swapTxHash ? (await deps.getSwapStatus(r.swapTxHash, r.chain)).status : undefined;
+      const st = r.swapTxHash ? await deps.getSwapStatus(r.swapTxHash, r.chain, r.destinationChain ?? undefined) : undefined;
+      const status = st?.status;
       const d = decideSwap(r, status, now);
       if (d.kind === "none") {
         await db.update(swaps).set({ trackedAt: new Date(now) }).where(eq(swaps.id, r.id));
@@ -62,7 +67,13 @@ export async function trackSwapsOnce(
       const [updated] = await db.batch([
         db
           .update(swaps)
-          .set({ state: d.to, errorCode: d.errorCode, trackedAt: new Date(now), updatedAt: new Date(now) })
+          .set({
+            state: d.to,
+            errorCode: d.errorCode,
+            trackedAt: new Date(now),
+            updatedAt: new Date(now),
+            ...(st?.destinationTxHash && !r.destinationTxHash ? { destinationTxHash: st.destinationTxHash.toLowerCase() } : {}),
+          })
           .where(and(eq(swaps.id, r.id), eq(swaps.state, r.state)))
           .returning({ id: swaps.id }),
         db.run(

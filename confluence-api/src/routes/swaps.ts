@@ -16,6 +16,7 @@ const uuid = z.uuid();
 const FeeBody = z.object({ chain: z.string().max(64), token, amount });
 const CreateBody = z.object({
   chain: z.string().max(64),
+  destinationChain: z.string().max(64).optional(),
   sender: address,
   recipient: address.optional(),
   tokenIn: token,
@@ -32,6 +33,7 @@ const EventBody = z.discriminatedUnion("step", [
     status: z.enum(["DONE", "FAILED", "PENDING", "NOT_FOUND"]),
     amountOut: amount.optional(),
     developerFee: amount.optional(),
+    destinationTxHash: txHash.optional(),
   }),
   z.object({
     step: z.literal("error"),

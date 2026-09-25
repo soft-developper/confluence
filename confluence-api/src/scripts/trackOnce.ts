@@ -28,7 +28,10 @@ async function main() {
   const kit = new AppKit();
   const s = await trackSwapsOnce({
     db,
-    getSwapStatus: async (txHash, chain) => ({ status: (await kit.getSwapStatus({ txHash, chainIn: chain as never })).progress.status }),
+    getSwapStatus: async (txHash, chainIn, chainOut) => {
+        const r = await kit.getSwapStatus({ txHash, chainIn: chainIn as never, ...(chainOut ? { chainOut: chainOut as never } : {}) });
+        return { status: r.progress.status, destinationTxHash: r.destination?.txHash };
+      },
     log: (m) => console.log(m),
   });
   console.log(`[${config.CONFLUENCE_ENV}] swaps: checked ${s.checked}, moved ${s.moved}, errors ${s.errors}`);

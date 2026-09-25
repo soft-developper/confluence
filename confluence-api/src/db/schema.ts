@@ -142,6 +142,8 @@ export const swaps = sqliteTable(
     idempotencyKey: text("idempotency_key").notNull(),
     state: text("state", { enum: SWAP_STATES }).notNull(),
     chain: text("chain").notNull(),
+    // Stage 6b: set only for cross-chain swaps (App Kit destination chain).
+    destinationChain: text("destination_chain"),
     sender: text("sender").notNull(),
     recipient: text("recipient").notNull(),
     tokenIn: text("token_in").notNull(),
@@ -159,6 +161,8 @@ export const swaps = sqliteTable(
     amountOut: text("amount_out"),
     approvalTxHash: text("approval_tx_hash"),
     swapTxHash: text("swap_tx_hash"),
+    // Stage 6b: the delivery transaction on the destination chain (cross-chain only).
+    destinationTxHash: text("destination_tx_hash"),
     errorCode: text("error_code"),
     reportTokenHash: text("report_token_hash"),
     trackedAt: integer("tracked_at", { mode: "timestamp_ms" }),

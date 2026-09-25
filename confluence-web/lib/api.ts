@@ -255,6 +255,7 @@ export const CreatedSwapSchema = z.object({
   reportToken: z.string(),
   state: z.string(),
   chain: z.string(),
+  destinationChain: z.string().nullable().optional(),
   sender: z.string(),
   recipient: z.string(),
   tokenIn: z.enum(["USDC", "EURC", "USDT", "NATIVE"]),
@@ -265,7 +266,14 @@ export const CreatedSwapSchema = z.object({
 export type CreatedSwap = z.infer<typeof CreatedSwapSchema>;
 
 export async function postSwap(
-  input: { chain: string; sender: string; tokenIn: SwapTokenSymbol; tokenOut: SwapTokenSymbol; amountIn: string },
+  input: {
+    chain: string;
+    destinationChain?: string;
+    sender: string;
+    tokenIn: SwapTokenSymbol;
+    tokenOut: SwapTokenSymbol;
+    amountIn: string;
+  },
   idempotencyKey: string,
 ): Promise<CreatedSwap> {
   const res = await fetch(`${publicEnv.apiUrl}/swaps`, {
@@ -282,7 +290,13 @@ export type SwapReportBody =
   | { step: "estimate"; estimatedOut: string; minOut: string }
   | { step: "approval"; txHash: string }
   | { step: "swap"; txHash: string }
-  | { step: "result"; status: "DONE" | "FAILED" | "PENDING" | "NOT_FOUND"; amountOut?: string; developerFee?: string }
+  | {
+      step: "result";
+      status: "DONE" | "FAILED" | "PENDING" | "NOT_FOUND";
+      amountOut?: string;
+      developerFee?: string;
+      destinationTxHash?: string;
+    }
   | { step: "error"; errorCategory?: string; errorMessage?: string };
 
 /** Reports one swap step. For the fee step the API answers with our backend fee. */

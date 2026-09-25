@@ -45,6 +45,8 @@ export function swapFee(reg: SwapRegistry, input: { chain: string; token: string
 
 export interface CreateSwapInput {
   chain: string;
+  /** Stage 6b: a different swap chain for a cross-chain swap; omitted or equal = same-chain. */
+  destinationChain?: string | undefined;
   sender: string;
   recipient?: string | undefined;
   tokenIn: string;
@@ -55,11 +57,17 @@ export interface CreateSwapInput {
 
 export async function createSwap(db: Db, reg: SwapRegistry, input: CreateSwapInput) {
   const chain = chainOr400(reg, input.chain);
+  const dest = input.destinationChain && input.destinationChain !== chain.id ? chainOr400(reg, input.destinationChain) : chain;
+  const crossChain = dest.id !== chain.id;
   const tin = tokenOf(chain, input.tokenIn);
-  const tout = tokenOf(chain, input.tokenOut);
+  const tout = tokenOf(dest, input.tokenOut);
   if (!tin) throw new SwapError(400, "unsupported_token", `${input.tokenIn} is not swappable on ${chain.name}`);
-  if (!tout) throw new SwapError(400, "unsupported_token", `${input.tokenOut} is not swappable on ${chain.name}`);
-  if (tin.symbol === tout.symbol) throw new SwapError(400, "same_token", "tokenIn and tokenOut must differ");
+  if (!tout) throw new SwapError(400, "unsupported_token", `${input.tokenOut} is not swappable on ${dest.name}`);
+  if (!crossChain && tin.symbol === tout.symbol) throw new SwapError(400, "same_token", "tokenIn and tokenOut must differ");
+  // USDC to USDC across chains is a bridge: CCTP moves it 1:1 without a swap.
+  if (crossChain && tin.symbol === "USDC" && tout.symbol === "USDC") {
+    throw new SwapError(400, "use_bridge", "moving USDC between chains is a bridge; use the Bridge tab");
+  }
   let amountBase: bigint;
   try {
     amountBase = parseUnits(input.amountIn, tin.decimals);
@@ -80,6 +88,7 @@ export async function createSwap(db: Db, reg: SwapRegistry, input: CreateSwapInp
         idempotencyKey: input.idempotencyKey,
         state: "CREATED",
         chain: chain.id,
+        destinationChain: crossChain ? dest.id : null,
         sender: input.sender,
         recipient,
         tokenIn: tin.symbol,
@@ -101,6 +110,7 @@ export async function createSwap(db: Db, reg: SwapRegistry, input: CreateSwapInp
     reportToken: token,
     state: "CREATED" as SwapState,
     chain: chain.id,
+    destinationChain: crossChain ? dest.id : null,
     sender: input.sender,
     recipient,
     tokenIn: tin.symbol,
@@ -123,7 +133,14 @@ export type SwapReport =
   | { step: "estimate"; estimatedOut: string; minOut: string }
   | { step: "approval"; txHash: string }
   | { step: "swap"; txHash: string }
-  | { step: "result"; status: "DONE" | "FAILED" | "PENDING" | "NOT_FOUND"; amountOut?: string | undefined; developerFee?: string | undefined }
+  | {
+      step: "result";
+      status: "DONE" | "FAILED" | "PENDING" | "NOT_FOUND";
+      amountOut?: string | undefined;
+      developerFee?: string | undefined;
+      /** Stage 6b: delivery transaction on the destination chain. */
+      destinationTxHash?: string | undefined;
+    }
   | { step: "error"; errorCategory?: string | undefined; errorMessage?: string | undefined };
 
 /** Whether the fee Circle reports matches ours: the full fee or the 90% share, within 1 base unit. */
@@ -153,6 +170,8 @@ export async function recordSwapReport(db: Db, reg: SwapRegistry, swapId: string
   switch (r.step) {
     case "fee": {
       if (s.state !== "CREATED") break;
+      // Circle takes cross-chain swap fees from the input token on the source chain.
+      if (s.destinationChain && r.side !== "input") throw new SwapError(400, "fee_side_invalid", "cross-chain swap fees are input-side");
       const feeToken = r.side === "input" ? s.tokenIn : s.tokenOut;
       if (r.token !== feeToken) throw new SwapError(400, "fee_token_mismatch", `the ${r.side}-side fee token for this swap is ${feeToken}`);
       if (!chain) throw new SwapError(409, "chain_unavailable", "this swap's chain is no longer supported");
@@ -176,6 +195,7 @@ export async function recordSwapReport(db: Db, reg: SwapRegistry, swapId: string
       break;
     case "result": {
       if (r.amountOut) patch.amountOut = r.amountOut;
+      if (r.destinationTxHash && !s.destinationTxHash) patch.destinationTxHash = r.destinationTxHash.toLowerCase();
       if (r.developerFee !== undefined) {
         patch.feeCharged = r.developerFee;
         const dec = chain?.tokens.find((t) => t.symbol === (s.feeToken as SwapToken | null))?.decimals;

@@ -38,7 +38,10 @@ if (config.TRACKER_ENABLED) {
       registry,
       messages,
       // Permissionless status lookup (no key): https://www.npmjs.com/package/@circle-fin/app-kit
-      getSwapStatus: async (txHash, chain) => ({ status: (await swapKit.getSwapStatus({ txHash, chainIn: chain as never })).progress.status }),
+      getSwapStatus: async (txHash, chainIn, chainOut) => {
+        const r = await swapKit.getSwapStatus({ txHash, chainIn: chainIn as never, ...(chainOut ? { chainOut: chainOut as never } : {}) });
+        return { status: r.progress.status, destinationTxHash: r.destination?.txHash };
+      },
     },
     config.TRACKER_INTERVAL_MS,
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { erc20Abi, formatUnits, parseUnits, type EIP1193Provider } from "viem";
 import { useBalance, useConnection, useReadContract, useSwitchChain } from "wagmi";
@@ -35,6 +36,11 @@ export function SwapCard() {
   const swapChains = chainsQ.data ?? [];
   const [chainId_, setChainId] = useState<string | null>(null);
   const chain: SwapChainInfo | undefined = swapChains.find((c) => c.id === chainId_) ?? swapChains[0];
+  // Stage 6b: destination network. Only offered when the API lists more than one swap
+  // chain (mainnet); on testnet Arc Testnet is the only swap chain, so this stays hidden.
+  const [destId, setDestId] = useState<string | null>(null);
+  const dest: SwapChainInfo | undefined = swapChains.find((c) => c.id === destId) ?? chain;
+  const crossChain = !!chain && !!dest && dest.id !== chain.id;
   const [tokenIn, setTokenIn] = useState<SwapTokenSymbol>("USDC");
   const [tokenOut, setTokenOut] = useState<SwapTokenSymbol>("EURC");
   const [amount, setAmount] = useState("");
@@ -42,16 +48,22 @@ export function SwapCard() {
   const [reviewing, setReviewing] = useState(false);
   const exec = useSwapExecution();
 
-  // Keep both tokens valid for the selected chain.
+  // Keep both tokens valid: tokenIn on the source chain, tokenOut on the destination.
   useEffect(() => {
-    if (!chain) return;
-    const syms = chain.tokens.map((t) => t.symbol);
-    if (!syms.includes(tokenIn)) setTokenIn(syms[0] ?? "USDC");
-    if (!syms.includes(tokenOut) || tokenOut === tokenIn) setTokenOut(syms.find((s) => s !== (syms.includes(tokenIn) ? tokenIn : syms[0])) ?? "EURC");
-  }, [chain, tokenIn, tokenOut]);
+    if (!chain || !dest) return;
+    const src = chain.tokens.map((t) => t.symbol);
+    const dst = dest.tokens.map((t) => t.symbol);
+    const tin = src.includes(tokenIn) ? tokenIn : (src[0] ?? "USDC");
+    if (tin !== tokenIn) setTokenIn(tin);
+    const bad = !dst.includes(tokenOut) || (!crossChain && tokenOut === tin);
+    if (bad) setTokenOut(dst.find((s) => crossChain || s !== tin) ?? "EURC");
+  }, [chain, dest, crossChain, tokenIn, tokenOut]);
 
   const tin = chain?.tokens.find((t) => t.symbol === tokenIn);
-  const tout = chain?.tokens.find((t) => t.symbol === tokenOut);
+  const tout = dest?.tokens.find((t) => t.symbol === tokenOut);
+  const destBridgeChain = bridgeChains.find((c) => c.id === dest?.id);
+  // USDC to USDC between chains is a bridge (CCTP, 1:1), not a swap.
+  const useBridge = crossChain && tokenIn === "USDC" && tokenOut === "USDC";
   const bridgeChain = bridgeChains.find((c) => c.id === chain?.id);
   const onChain = !!chain && chainId === chain.evmChainId;
 
@@ -73,7 +85,7 @@ export function SwapCard() {
   const insufficient = !!cleaned && !!tin && balanceBase !== undefined && parseUnits(cleaned, tin.decimals) > balanceBase;
 
   const estimateQ = useQuery({
-    queryKey: ["swap-estimate", chain?.id, tokenIn, tokenOut, debounced, slippage, address],
+    queryKey: ["swap-estimate", chain?.id, dest?.id, tokenIn, tokenOut, debounced, slippage, address],
     queryFn: async () => {
       const provider = (await connector!.getProvider()) as EIP1193Provider;
       const { kit, adapter } = await loadSwapKit({
@@ -88,13 +100,15 @@ export function SwapCard() {
       });
       return kit.estimateSwap({
         from: { adapter, chain: chain!.id as never },
+        ...(crossChain ? { to: { chain: dest!.id as never, recipientAddress: address! } } : {}),
         tokenIn,
         tokenOut,
         amountIn: debounced!,
         config: { slippageBps: slippage },
       });
     },
-    enabled: !!debounced && !!chain && !!address && !!connector && onChain && !insufficient && tokenIn !== tokenOut && exec.run.phase === "idle",
+    enabled:
+      !!debounced && !!chain && !!address && !!connector && onChain && !insufficient && !useBridge && (crossChain || tokenIn !== tokenOut) && exec.run.phase === "idle",
     staleTime: 20_000,
     refetchInterval: reviewing ? false : 30_000,
     retry: false,
@@ -123,6 +137,7 @@ export function SwapCard() {
   else if (!onChain) action = { label: switching ? "Switching..." : `Switch to ${chain.name}`, onClick: () => switchChain({ chainId: chain.evmChainId }), disabled: switching };
   else if (!cleaned) action = { label: "Enter an amount", disabled: true };
   else if (insufficient) action = { label: `Insufficient ${tin?.label ?? tokenIn}`, disabled: true };
+  else if (useBridge) action = { label: "USDC between chains: use Bridge", disabled: true };
   else if (estimateQ.isFetching && !est) action = { label: "Getting estimate...", disabled: true };
   else if (!est || stale) action = { label: estimateQ.isError ? "No estimate" : "Getting estimate...", disabled: true };
   else action = { label: "Review swap", onClick: () => setReviewing(true) };
@@ -130,6 +145,7 @@ export function SwapCard() {
   const run = exec.run;
   const started = run.phase !== "idle";
   const explorer = run.explorerUrl ?? (bridgeChain && run.swapTx ? bridgeChain.explorerTxUrl.replace("{hash}", run.swapTx) : undefined);
+  const destExplorer = destBridgeChain && run.destinationTx ? destBridgeChain.explorerTxUrl.replace("{hash}", run.destinationTx) : undefined;
 
   // ---------- review and execution ----------
   if (reviewing && est && chain && tin && tout && address && cleaned) {
@@ -154,7 +170,14 @@ export function SwapCard() {
           </span>
         </div>
         <dl className="flex flex-col gap-2 text-sm">
-          <Row label="Network" value={chain.name} />
+          {crossChain && dest ? (
+            <>
+              <Row label="From network" value={chain.name} />
+              <Row label="To network" value={dest.name} />
+            </>
+          ) : (
+            <Row label="Network" value={chain.name} />
+          )}
           <Row label={`Minimum received (${slippage / 100}% slippage)`} value={`${fmt(est.stopLimit.amount)} ${tout.label}`} />
           <Row label="Confluence fee" value={fee ? `${fmt(fee.amount)} ${fee.token === "NATIVE" ? (tin.symbol === "NATIVE" ? tin.label : tout.label) : fee.token}` : "Included"} />
           <Row label="Wallet" value={shortAddress(address)} />
@@ -170,7 +193,15 @@ export function SwapCard() {
             <Step done={!!run.approvalTx || !!run.swapTx || run.phase === "success"} active={run.phase === "running" && !run.approvalTx && !run.swapTx}
               text={run.approvalTx ? `${tin.label} approved` : run.swapTx || run.phase === "success" ? `${tin.label} allowance ready` : `Approve ${tin.label} (if your wallet asks)`} />
             <Step done={!!run.swapTx} active={run.phase === "running" && !run.swapTx && !!run.approvalTx} text={run.swapTx ? "Swap submitted" : "Sign the swap"} />
-            <Step done={run.phase === "success"} active={run.phase === "running" && !!run.swapTx} text={run.phase === "success" ? "Swap confirmed" : "Waiting for confirmation"} />
+            {crossChain && dest ? (
+              <Step
+                done={run.phase === "success"}
+                active={run.phase === "running" && !!run.swapTx}
+                text={run.phase === "success" ? `Delivered on ${dest.name}` : `Delivering on ${dest.name}`}
+              />
+            ) : (
+              <Step done={run.phase === "success"} active={run.phase === "running" && !!run.swapTx} text={run.phase === "success" ? "Swap confirmed" : "Waiting for confirmation"} />
+            )}
           </ol>
         )}
         {run.phase === "error" && run.error && (
@@ -180,7 +211,12 @@ export function SwapCard() {
         )}
         {explorer && (
           <a href={explorer} target="_blank" rel="noopener noreferrer" className="self-start text-sm text-action-text">
-            View swap transaction
+            {crossChain ? "View source transaction" : "View swap transaction"}
+          </a>
+        )}
+        {destExplorer && (
+          <a href={destExplorer} target="_blank" rel="noopener noreferrer" className="self-start text-sm text-action-text">
+            View delivery on {dest?.name}
           </a>
         )}
         {!started ? (
@@ -189,6 +225,7 @@ export function SwapCard() {
               connector &&
               void exec.start({
                 chain: chain.id,
+                ...(crossChain && dest ? { destinationChain: dest.id } : {}),
                 sender: address,
                 tokenIn,
                 tokenOut,
@@ -285,12 +322,28 @@ export function SwapCard() {
       </button>
 
       <div className="flex flex-col gap-2 rounded-md border border-border bg-bg p-4">
-        <span className="text-xs text-ink-muted">You receive (estimated)</span>
+        <div className="flex items-center justify-between gap-2 text-xs text-ink-muted">
+          <span>You receive (estimated)</span>
+          {swapChains.length > 1 && chain && (
+            <select
+              aria-label="Receive on network"
+              value={dest?.id ?? chain.id}
+              onChange={(e) => setDestId(e.target.value)}
+              className="h-7 rounded-[4px] border border-border-control bg-surface px-1.5 text-xs"
+            >
+              {swapChains.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.id === chain.id ? `${c.name} (same network)` : `on ${c.name}`}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <span className={`tnum min-w-0 flex-1 truncate text-[22px] font-medium ${est && !stale ? "text-destination-text" : "text-ink-muted"}`}>
             {est && !stale ? fmt(est.estimatedOutput.amount) : estimateQ.isFetching ? "..." : "0.00"}
           </span>
-          <TokenSelect chain={chain} value={tokenOut} onChange={setTokenOut} exclude={tokenIn} label="Token to receive" />
+          <TokenSelect chain={dest} value={tokenOut} onChange={setTokenOut} exclude={crossChain ? undefined : tokenIn} label="Token to receive" />
         </div>
       </div>
 
@@ -321,6 +374,20 @@ export function SwapCard() {
         </div>
       </div>
 
+      {useBridge && (
+        <div role="status" className="rounded-md border border-border-control bg-bg p-3 text-[13px]">
+          Moving USDC between chains is a bridge, not a swap: CCTP moves it 1:1.{" "}
+          <Link href="/" className="font-medium text-action-text">
+            Open the Bridge
+          </Link>
+        </div>
+      )}
+      {crossChain && dest && !useBridge && (
+        <p className="text-xs text-ink-muted">
+          Cross-chain swap: you sign on {chain?.name}; the {tout?.label ?? tokenOut} arrives in your wallet on {dest.name}. Circle takes the fee from
+          the token you pay.
+        </p>
+      )}
       {feeShare >= HIGH_FEE_SHARE && fee && (
         <div role="status" className="rounded-md border border-warning bg-bg p-3 text-[13px]">
           The {fmt(fee.amount)} {fee.token} fee is {Math.round(feeShare * 100)}% of this swap. The fee is flat up to 1,000, so larger swaps cost
