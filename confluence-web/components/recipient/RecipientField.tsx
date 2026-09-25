@@ -11,6 +11,7 @@ import {
   type SavedAddress,
 } from "@/lib/addressBook";
 import { shortAddress, type BridgeChain } from "@/lib/chains";
+import { useIdRecipient } from "@/hooks/useIdRecipient";
 
 const inputCls =
   "h-10 rounded-md border border-border-control bg-bg px-3 text-sm outline-none focus:border-action-text";
@@ -65,6 +66,7 @@ export function RecipientField({
   const [saveError, setSaveError] = useState(false);
   const valid = isAddress(value);
   const label = valid ? book.labelOf(value) : undefined;
+  const id = useIdRecipient(value);
 
   useEffect(() => {
     setSaving(false);
@@ -87,15 +89,25 @@ export function RecipientField({
         id="recipient"
         value={value}
         onChange={(e) => onChange(e.target.value.trim())}
-        placeholder="0x..."
+        placeholder="0x... or @confluence_id"
         autoComplete="off"
         spellCheck={false}
-        aria-invalid={value.length > 0 && !valid}
+        aria-invalid={value.length > 0 && !valid && !(id.isId && id.resolved)}
         className={`h-11 rounded-md border bg-bg px-3 font-mono text-xs outline-none ${
-          value.length > 0 && !valid ? "border-danger" : "border-border-control focus:border-action-text"
+          value.length > 0 && !valid && !(id.isId && (id.resolved || id.loading || !id.wellFormed)) ? "border-danger" : "border-border-control focus:border-action-text"
         }`}
       />
-      {value.length > 0 && !valid && <span className="text-xs text-danger">Not a valid EVM address</span>}
+      {value.length > 0 && !valid && !id.isId && <span className="text-xs text-danger">Not a valid EVM address or @confluence_id</span>}
+      {id.isId && !id.wellFormed && value.length > 1 && <span className="text-xs text-ink-muted">Confluence IDs are 3 to 20 letters, digits or underscores.</span>}
+      {id.isId && id.wellFormed && id.loading && <span className="text-xs text-ink-muted">Finding @{id.handle}...</span>}
+      {id.isId && id.wellFormed && !id.loading && id.resolved === null && (
+        <span className="text-xs text-danger">No Confluence ID @{id.handle}</span>
+      )}
+      {id.isId && id.resolved && (
+        <span className="text-xs text-destination-text">
+          @{id.resolved.handle} → <span className="font-mono">{shortAddress(id.resolved.address)}</span>. Confluence checks this again when quoting.
+        </span>
+      )}
       {valid && label && <span className="text-xs text-destination-text">Saved as {label}</span>}
       {valid && !label && owner && !saving && (
         <div className="flex items-center justify-between gap-2">

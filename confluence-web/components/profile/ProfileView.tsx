@@ -322,9 +322,13 @@ function HistoryRow({
   const tone = it.state === "COMPLETED" ? "text-destination-text" : it.state === "FAILED" || it.state === "CREATED" ? "text-ink-muted" : it.state === "RECOVERY_REQUIRED" ? "text-warning" : "text-action-text";
   const when = new Date(it.createdAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
   const route = it.destinationChain && it.destinationChain !== it.sourceChain ? `${nameOf(it.sourceChain)} → ${nameOf(it.destinationChain)}` : nameOf(it.sourceChain);
+  // Stage 8a: incoming payments and payments to a Confluence ID.
+  const who = it.counterpartyId ? `@${it.counterpartyId}` : it.counterparty ? shortAddress(it.counterparty) : null;
   const title =
     it.kind === "bridge"
-      ? `Bridge ${it.amountIn} USDC`
+      ? it.direction === "in"
+        ? `Received ${it.amountIn} USDC${who ? ` from ${who}` : ""}`
+        : `Bridge ${it.amountIn} USDC${who ? ` to ${who}` : ""}`
       : `Swap ${it.amountIn} ${it.tokenIn} → ${it.amountOut ? `${it.amountOut} ` : ""}${it.tokenOut}`;
   const src = chains.find((c) => c.id === it.sourceChain);
   const href = it.kind === "bridge" ? `/tx/${it.id}` : it.txHash && src ? src.explorerTxUrl.replace("{hash}", it.txHash) : undefined;

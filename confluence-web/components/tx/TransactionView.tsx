@@ -322,7 +322,7 @@ function Loaded({ t, from, to, view, irisError, onMinted }: { t: TransferDetail;
       <div className="h-px bg-border" />
       <dl className="flex flex-col gap-2 text-sm">
         <Detail label="Source" value={shortAddress(t.sender)} />
-        <Detail label="Destination" value={shortAddress(t.recipient)} />
+        <Detail label="Destination" value={t.recipientId ? `@${t.recipientId} · ${shortAddress(t.recipient)}` : shortAddress(t.recipient)} />
         <Detail label="Burn transaction" value={t.burnTxHash ? shortAddress(t.burnTxHash) : "Not yet"} />
         <Detail label="Attestation" value={view.attested ? "Available" : view.burned ? "Pending" : "Not yet"} />
         <Detail label="Mint transaction" value={mintHash ? shortAddress(mintHash) : minted ? "Confirmed" : "Not yet"} />

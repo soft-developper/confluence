@@ -9,6 +9,8 @@ export const QuoteSchema = z.object({
   destinationChain: z.string(),
   sender: z.string(),
   recipient: z.string(),
+  /** Stage 8a: set when the payer chose a Confluence ID (the API resolved it). */
+  recipientId: z.string().nullable().optional(),
   speed: z.enum(["FAST", "SLOW"]),
   useForwarder: z.boolean(),
   eta: z.string().nullable(),
@@ -29,6 +31,8 @@ export interface QuoteRequest {
   amount: string;
   sender: string;
   recipient?: string;
+  /** Stage 8a: pay a Confluence ID; the API resolves it (never the browser). */
+  recipientId?: string;
   speed: "FAST" | "SLOW";
   useForwarder: boolean;
 }
@@ -85,6 +89,8 @@ export function quoteErrorText(e: unknown): string {
         return "Circle's fee service is not responding. Try again in a moment.";
       case "fee_recipient_not_configured":
         return "This route is not configured yet.";
+      case "id_not_found":
+        return "That Confluence ID does not exist. Check the spelling.";
       case "rate_limited":
         return "Too many quote requests. Wait a minute and try again.";
       default:
@@ -105,6 +111,8 @@ export const CreatedTransferSchema = z.object({
   destinationChain: z.string(),
   sender: z.string(),
   recipient: z.string(),
+  /** Stage 8a: set when the payer chose a Confluence ID (the API resolved it). */
+  recipientId: z.string().nullable().optional(),
   speed: z.enum(["FAST", "SLOW"]),
   useForwarder: z.boolean(),
   amount: Money,
@@ -176,6 +184,8 @@ export const TransferDetailSchema = z.object({
   destinationChain: z.string(),
   sender: z.string(),
   recipient: z.string(),
+  /** Stage 8a: set when the payer chose a Confluence ID (the API resolved it). */
+  recipientId: z.string().nullable().optional(),
   speed: z.enum(["FAST", "SLOW"]),
   useForwarder: z.boolean(),
   amount: Money,
@@ -366,6 +376,9 @@ export async function checkIdAvailability(handle: string) {
 
 export const HistoryItemSchema = z.object({
   kind: z.enum(["bridge", "swap"]),
+  direction: z.enum(["out", "in"]).default("out"),
+  counterparty: z.string().nullable().optional(),
+  counterpartyId: z.string().nullable().optional(),
   id: z.string(),
   state: z.string(),
   createdAt: z.string(),
@@ -407,4 +420,14 @@ export async function signOut(token: string, everywhere = false): Promise<void> 
   } catch (e) {
     if (!(e instanceof SessionExpiredError)) throw e;
   }
+}
+
+// ---------- pay to a Confluence ID (Stage 8a) ----------
+
+/** Resolves @handle for display only; payments are resolved again by the API. */
+export async function lookupConfluenceId(handle: string): Promise<{ handle: string; address: string } | null> {
+  const res = await fetch(`${publicEnv.apiUrl}/ids/${encodeURIComponent(handle)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw await readError(res);
+  return z.object({ handle: z.string(), address: z.string() }).parse(await res.json());
 }

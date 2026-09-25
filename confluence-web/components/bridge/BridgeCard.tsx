@@ -18,6 +18,7 @@ import { GasWarning } from "./GasWarning";
 import { RecipientField } from "@/components/recipient/RecipientField";
 import { RecipientWarnings, useRecipientChecks } from "@/components/recipient/RecipientChecks";
 import { useAddressBook } from "@/lib/addressBook";
+import { useIdRecipient } from "@/hooks/useIdRecipient";
 import { estimateSourceGas } from "@/lib/sourceGas";
 
 const AMOUNT_INPUT = /^(\d{0,12})(\.\d{0,6})?$/;
@@ -119,7 +120,9 @@ export function BridgeCard() {
   const balance = useUsdcBalance(from, address);
   const balanceBase = balance.data;
 
-  const recipientValid = !recipientOn || isAddress(recipient);
+  // Stage 8a: "@handle" pays a Confluence ID; the API resolves it when quoting.
+  const idRecipient = useIdRecipient(recipientOn ? recipient : "");
+  const recipientValid = !recipientOn || isAddress(recipient) || (idRecipient.isId && !!idRecipient.resolved);
   const amountBase = (() => {
     try {
       return amount && Number(amount) > 0 ? parseUnits(amount, 6) : 0n;
@@ -137,12 +140,12 @@ export function BridgeCard() {
               destinationChain: to.id,
               amount,
               sender: address,
-              ...(recipientOn ? { recipient } : {}),
+              ...(recipientOn ? (idRecipient.isId ? { recipientId: idRecipient.handle } : { recipient }) : {}),
               speed: fastAvailable ? speed : ("SLOW" as const),
               useForwarder: forwardingAvailable && useForwarder,
             }
           : null,
-      [from, to, address, amountBase, amount, recipientValid, recipientOn, recipient, speed, fastAvailable, forwardingAvailable, useForwarder],
+      [from, to, address, amountBase, amount, recipientValid, recipientOn, recipient, idRecipient.isId, idRecipient.handle, speed, fastAvailable, forwardingAvailable, useForwarder],
     ),
   );
 
@@ -205,7 +208,13 @@ export function BridgeCard() {
   }, [execPhase, refetchBalance]);
 
   // Recipient safety checks (warn only) and address book labels.
-  const activeRecipient = recipientOn && isAddress(recipient) ? recipient : undefined;
+  const activeRecipient = !recipientOn
+    ? undefined
+    : isAddress(recipient)
+      ? recipient
+      : idRecipient.resolved
+        ? idRecipient.resolved.address
+        : undefined;
   const recipientChecks = useRecipientChecks(address, activeRecipient, to);
   const book = useAddressBook(address);
 
@@ -288,7 +297,11 @@ export function BridgeCard() {
   else if (from && chainId !== from.evmChainId)
     action = { label: switching ? "Switching..." : `Switch to ${from.name}`, onClick: () => switchChain({ chainId: from.evmChainId }), disabled: switching };
   else if (!amountBase) action = { label: "Enter an amount", disabled: true };
-  else if (!recipientValid) action = { label: "Enter a valid recipient", disabled: true };
+  else if (!recipientValid)
+    action = {
+      label: idRecipient.isId ? (idRecipient.loading ? "Finding @" + idRecipient.handle + "..." : "Unknown Confluence ID") : "Enter a valid recipient",
+      disabled: true,
+    };
   else if (insufficient) action = { label: "Insufficient USDC", disabled: true };
   else if (!quote || quoteQ.error) action = { label: updating ? "Getting quote..." : "Review bridge", disabled: true };
   else
@@ -334,7 +347,7 @@ export function BridgeCard() {
           switching={switching}
           onSwitch={() => switchChain({ chainId: from.evmChainId })}
           destinationGas={destGas.data?.value}
-          recipientLabel={book.labelOf(reviewQuote.recipient)}
+          recipientLabel={reviewQuote.recipientId ? `@${reviewQuote.recipientId}` : book.labelOf(reviewQuote.recipient)}
           recipientWarning={
             to && reviewQuote.recipient.toLowerCase() !== address.toLowerCase() ? (
               <RecipientWarnings checks={recipientChecks} destination={to} />
