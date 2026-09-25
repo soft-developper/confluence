@@ -9,6 +9,7 @@ import { quotesRouter } from "./routes/quotes.js";
 import { feesRouter } from "./routes/fees.js";
 import { REPORT_TOKEN_HEADER, transfersRouter } from "./routes/transfers.js";
 import { swapsRouter } from "./routes/swaps.js";
+import { accountRouter } from "./routes/account.js";
 import { buildSwapRegistry, type SwapRegistry } from "./swaps/tokens.js";
 import type { IrisClient } from "./circle/iris.js";
 import type { ChainRegistry } from "./chains/registry.js";
@@ -43,8 +44,8 @@ export function createApp(
       // Requests without an Origin header (curl, server to server) pass; browsers
       // from origins not on the allowlist get no CORS headers and are blocked.
       origin: (origin, callback) => callback(null, !origin || allowed.has(origin)),
-      methods: ["GET", "POST", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Idempotency-Key", REPORT_TOKEN_HEADER],
+      methods: ["GET", "POST", "PUT", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Idempotency-Key", REPORT_TOKEN_HEADER, "Authorization"],
       credentials: false,
       maxAge: 600,
     }),
@@ -58,6 +59,7 @@ export function createApp(
   app.use(feesRouter());
   app.use(transfersRouter(db));
   app.use(swapsRouter(db, swapRegistry));
+  app.use(accountRouter(db, config, registry));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });

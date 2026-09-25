@@ -192,3 +192,64 @@ export const swapEvents = sqliteTable(
   },
   (t) => [index("swap_events_swap_idx").on(t.swapId)],
 );
+
+// ---------- accounts and sign-in (Stage 7a) ----------
+
+/** One wallet is one account (locked decision). Address stored lowercase. */
+export const accounts = sqliteTable(
+  "accounts",
+  {
+    address: text("address").primaryKey(),
+    // Confluence ID: lowercase, permanent once claimed (locked decision).
+    confluenceId: text("confluence_id"),
+    idClaimedAt: integer("id_claimed_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("accounts_confluence_id_uq").on(t.confluenceId)],
+);
+
+/** Single-use Sign-In with Ethereum nonces (EIP-4361). */
+export const authNonces = sqliteTable("auth_nonces", {
+  nonce: text("nonce").primaryKey(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  usedAt: integer("used_at", { mode: "timestamp_ms" }),
+  createdAt: createdAt(),
+});
+
+/** Session tokens: only the sha256 is stored; 7-day expiry; revocable. */
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull(),
+    address: text("address")
+      .notNull()
+      .references(() => accounts.address),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("sessions_token_hash_uq").on(t.tokenHash), index("sessions_address_idx").on(t.address)],
+);
+
+/**
+ * Server copy of the browser address book (Stage 3 shape). One row per saved address
+ * per owner; merges keep the newest updatedAt; deletes are kept as deletedAt tombstones.
+ */
+export const addressBookEntries = sqliteTable(
+  "address_book_entries",
+  {
+    owner: text("owner")
+      .notNull()
+      .references(() => accounts.address),
+    address: text("address").notNull(), // lowercase key
+    id: text("id").notNull(),
+    displayAddress: text("display_address").notNull(), // EIP-55 as saved
+    label: text("label").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [uniqueIndex("address_book_owner_address_uq").on(t.owner, t.address)],
+);
