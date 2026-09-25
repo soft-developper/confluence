@@ -11,6 +11,8 @@ export const QuoteSchema = z.object({
   recipient: z.string(),
   /** Stage 8a: set when the payer chose a Confluence ID (the API resolved it). */
   recipientId: z.string().nullable().optional(),
+  /** Stage 8b: set when paying a payment request. */
+  requestId: z.string().nullable().optional(),
   speed: z.enum(["FAST", "SLOW"]),
   useForwarder: z.boolean(),
   eta: z.string().nullable(),
@@ -27,8 +29,11 @@ export type Quote = z.infer<typeof QuoteSchema>;
 
 export interface QuoteRequest {
   sourceChain: string;
-  destinationChain: string;
-  amount: string;
+  /** Omitted when paying a request (the API takes it from the request). */
+  destinationChain?: string;
+  amount?: string;
+  /** Stage 8b: pay a payment request; destination, recipient and amount come from it. */
+  requestId?: string;
   sender: string;
   recipient?: string;
   /** Stage 8a: pay a Confluence ID; the API resolves it (never the browser). */
@@ -91,6 +96,12 @@ export function quoteErrorText(e: unknown): string {
         return "This route is not configured yet.";
       case "id_not_found":
         return "That Confluence ID does not exist. Check the spelling.";
+      case "request_paid":
+        return "This request has already been paid.";
+      case "request_expired":
+        return "This request has expired. Ask for a new link.";
+      case "request_cancelled":
+        return "This request was cancelled.";
       case "rate_limited":
         return "Too many quote requests. Wait a minute and try again.";
       default:
@@ -113,6 +124,8 @@ export const CreatedTransferSchema = z.object({
   recipient: z.string(),
   /** Stage 8a: set when the payer chose a Confluence ID (the API resolved it). */
   recipientId: z.string().nullable().optional(),
+  /** Stage 8b: set when paying a payment request. */
+  requestId: z.string().nullable().optional(),
   speed: z.enum(["FAST", "SLOW"]),
   useForwarder: z.boolean(),
   amount: Money,
@@ -186,6 +199,8 @@ export const TransferDetailSchema = z.object({
   recipient: z.string(),
   /** Stage 8a: set when the payer chose a Confluence ID (the API resolved it). */
   recipientId: z.string().nullable().optional(),
+  /** Stage 8b: set when paying a payment request. */
+  requestId: z.string().nullable().optional(),
   speed: z.enum(["FAST", "SLOW"]),
   useForwarder: z.boolean(),
   amount: Money,
@@ -430,4 +445,47 @@ export async function lookupConfluenceId(handle: string): Promise<{ handle: stri
   if (res.status === 404) return null;
   if (!res.ok) throw await readError(res);
   return z.object({ handle: z.string(), address: z.string() }).parse(await res.json());
+}
+
+// ---------- payment requests (Stage 8b) ----------
+
+export const PaymentRequestSchema = z.object({
+  id: z.string(),
+  status: z.enum(["open", "paid", "expired", "cancelled"]),
+  payee: z.string(),
+  payeeId: z.string().nullable(),
+  destinationChain: z.string(),
+  amount: Money,
+  memo: z.string().nullable(),
+  expiresAt: z.string(),
+  createdAt: z.string(),
+  cancelledAt: z.string().nullable(),
+  paidTransferId: z.string().nullable(),
+  paidAt: z.string().nullable(),
+  paymentInProgress: z.boolean(),
+});
+export type PaymentRequest = z.infer<typeof PaymentRequestSchema>;
+
+/** Public read for the pay page. Returns null when the link is unknown. */
+export async function fetchPaymentRequest(id: string): Promise<PaymentRequest | null> {
+  const res = await fetch(`${publicEnv.apiUrl}/requests/${encodeURIComponent(id)}`, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) throw await readError(res);
+  return PaymentRequestSchema.parse(await res.json());
+}
+
+export async function createPaymentRequest(
+  token: string,
+  input: { destinationChain: string; amount: string; memo?: string; expiresInDays?: number },
+): Promise<PaymentRequest> {
+  return PaymentRequestSchema.parse(await (await authed(token, "/requests", { method: "POST", body: JSON.stringify(input) })).json());
+}
+
+export async function fetchMyRequests(token: string): Promise<PaymentRequest[]> {
+  const j = await (await authed(token, "/me/requests")).json();
+  return z.object({ requests: z.array(PaymentRequestSchema) }).parse(j).requests;
+}
+
+export async function cancelPaymentRequest(token: string, id: string): Promise<PaymentRequest> {
+  return PaymentRequestSchema.parse(await (await authed(token, `/requests/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" })).json());
 }

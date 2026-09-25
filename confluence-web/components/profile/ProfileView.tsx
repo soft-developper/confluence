@@ -22,6 +22,7 @@ import { ConnectModal } from "@/components/wallet/ConnectModal";
 import { SYNC_EVENT } from "@/components/SessionSync";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useSignIn } from "@/hooks/useSignIn";
+import { RequestsCard } from "./RequestsCard";
 
 const ID_RULE = /^[a-z0-9_]{3,20}$/;
 
@@ -140,6 +141,7 @@ function SignedIn({ address, token }: { address: `0x${string}`; token: string })
           </p>
         )}
       </Card>
+      <RequestsCard token={token} />
       <SyncCard address={address} />
       <HistoryCard token={token} address={address} />
     </div>
