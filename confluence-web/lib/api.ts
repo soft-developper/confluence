@@ -207,3 +207,91 @@ export async function fetchTransfer(id: string): Promise<TransferDetail | null> 
   if (!res.ok) throw await readError(res);
   return TransferDetailSchema.parse(await res.json());
 }
+
+// ---------- swaps (Stage 6a) ----------
+
+export type SwapTokenSymbol = "USDC" | "EURC" | "USDT" | "NATIVE";
+
+export const SwapChainsSchema = z.object({
+  chains: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      evmChainId: z.number(),
+      tokens: z.array(
+        z.object({
+          symbol: z.enum(["USDC", "EURC", "USDT", "NATIVE"]),
+          address: z.string().nullable(),
+          decimals: z.number(),
+          label: z.string(),
+        }),
+      ),
+    }),
+  ),
+});
+export type SwapChainInfo = z.infer<typeof SwapChainsSchema>["chains"][number];
+
+export async function fetchSwapChains(): Promise<SwapChainInfo[]> {
+  const res = await fetch(`${publicEnv.apiUrl}/swaps/chains`);
+  if (!res.ok) throw await readError(res);
+  return SwapChainsSchema.parse(await res.json()).chains;
+}
+
+const FeeResponse = z.object({ token: z.string(), fee: z.string(), rule: z.enum(["flat", "percent"]) });
+
+/** Backend swap fee for an amount of a fee token (stateless, for estimates). */
+export async function postSwapFee(input: { chain: string; token: SwapTokenSymbol; amount: string }) {
+  const res = await fetch(`${publicEnv.apiUrl}/swaps/fee`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await readError(res);
+  return FeeResponse.parse(await res.json());
+}
+
+export const CreatedSwapSchema = z.object({
+  id: z.string(),
+  reportToken: z.string(),
+  state: z.string(),
+  chain: z.string(),
+  sender: z.string(),
+  recipient: z.string(),
+  tokenIn: z.enum(["USDC", "EURC", "USDT", "NATIVE"]),
+  tokenOut: z.enum(["USDC", "EURC", "USDT", "NATIVE"]),
+  amountIn: z.string(),
+  feeRecipient: z.string(),
+});
+export type CreatedSwap = z.infer<typeof CreatedSwapSchema>;
+
+export async function postSwap(
+  input: { chain: string; sender: string; tokenIn: SwapTokenSymbol; tokenOut: SwapTokenSymbol; amountIn: string },
+  idempotencyKey: string,
+): Promise<CreatedSwap> {
+  const res = await fetch(`${publicEnv.apiUrl}/swaps`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await readError(res);
+  return CreatedSwapSchema.parse(await res.json());
+}
+
+export type SwapReportBody =
+  | { step: "fee"; side: "input" | "output"; token: SwapTokenSymbol; amount: string }
+  | { step: "estimate"; estimatedOut: string; minOut: string }
+  | { step: "approval"; txHash: string }
+  | { step: "swap"; txHash: string }
+  | { step: "result"; status: "DONE" | "FAILED" | "PENDING" | "NOT_FOUND"; amountOut?: string; developerFee?: string }
+  | { step: "error"; errorCategory?: string; errorMessage?: string };
+
+/** Reports one swap step. For the fee step the API answers with our backend fee. */
+export async function postSwapEvent(id: string, token: string, body: SwapReportBody): Promise<{ state: string; fee?: string }> {
+  const res = await fetch(`${publicEnv.apiUrl}/swaps/${encodeURIComponent(id)}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Transfer-Token": token },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await readError(res);
+  return (await res.json()) as { state: string; fee?: string };
+}

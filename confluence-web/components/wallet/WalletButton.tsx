@@ -38,7 +38,8 @@ export function WalletButton() {
         aria-expanded={menu}
         className="flex h-10 items-center gap-2 rounded-md border border-border-control bg-surface px-3 text-[13px] hover:border-action-text"
       >
-        <span className={chain ? "text-ink-muted" : "text-warning"}>{chain ? chain.name : "Unsupported network"}</span>
+        {/* The network name hides on the narrowest phones so the header fits (address stays). */}
+        <span className={`${chain ? "text-ink-muted" : "text-warning"} hidden min-[380px]:inline`}>{chain ? chain.name : "Unsupported network"}</span>
         <span className="font-mono">{shortAddress(address)}</span>
       </button>
       {menu && (
