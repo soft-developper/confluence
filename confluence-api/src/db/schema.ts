@@ -69,6 +69,8 @@ export const transfers = sqliteTable(
     // sha256 (hex) of the secret report token returned once by POST /transfers.
     // The browser sends the token with step reports; we never store the token itself.
     reportTokenHash: text("report_token_hash"),
+    // Last time the Stage 4 tracker checked this row (Circle and the chain). Null = never.
+    trackedAt: integer("tracked_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
   },
@@ -79,6 +81,7 @@ export const transfers = sqliteTable(
     uniqueIndex("transfers_burn_tx_hash_uq").on(t.burnTxHash),
     index("transfers_state_idx").on(t.state),
     index("transfers_sender_idx").on(t.sender),
+    index("transfers_tracked_at_idx").on(t.trackedAt),
   ],
 );
 

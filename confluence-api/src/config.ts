@@ -36,6 +36,13 @@ const EnvSchema = z
     // (one Circle quickstart says 40; we use the lower number). The cap of 15 keeps the
     // 2x burst (30) under 35.
     CIRCLE_MAX_RPS: z.coerce.number().positive().max(15).default(10),
+    // Stage 4 tracker: checks unfinished transfers against Circle and the chain while
+    // the API is awake. "false" turns it off (for example when running two instances).
+    TRACKER_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((v) => v === "true"),
+    TRACKER_INTERVAL_MS: z.coerce.number().int().min(15_000).max(3_600_000).default(60_000),
     // Circle API keys are environment specific (testnet and mainnet each need their own).
     CIRCLE_API_KEY: optionalString,
   })

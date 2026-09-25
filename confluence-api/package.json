@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "fees:set-recipient": "tsx src/scripts/setFeeRecipient.ts"
+    "fees:set-recipient": "tsx src/scripts/setFeeRecipient.ts",
+    "tracker:once": "tsx src/scripts/trackOnce.ts"
   },
   "dependencies": {
     "@circle-fin/app-kit": "^1.15.2",

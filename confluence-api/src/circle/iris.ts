@@ -67,3 +67,63 @@ export class IrisClient {
     return value;
   }
 }
+
+// ---------- messages (Stage 4 tracker) ----------
+// GET /v2/messages/{sourceDomainId}?transactionHash=
+// https://developers.circle.com/api-reference/cctp/all/get-messages-v2
+
+const MessageBody = z
+  .object({
+    burnToken: z.string(),
+    mintRecipient: z.string(),
+    amount: z.string(),
+    messageSender: z.string().optional(),
+    expirationBlock: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const Message = z
+  .object({
+    status: z.string(),
+    attestation: z.string().nullable().optional(),
+    eventNonce: z.string().nullable().optional(),
+    forwardState: z.string().nullable().optional(),
+    forwardTxHash: z.string().nullable().optional(),
+    decodedMessage: z
+      .object({
+        sourceDomain: z.string(),
+        destinationDomain: z.string(),
+        nonce: z.string().optional(),
+        destinationCaller: z.string().optional(),
+        minFinalityThreshold: z.string().optional(),
+        decodedMessageBody: MessageBody.nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+export type IrisMessage = z.infer<typeof Message>;
+
+const MessagesResponse = z.object({ messages: z.array(Message) });
+
+export class IrisMessagesClient {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly limiter: TokenBucket,
+    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly timeoutMs = 8_000,
+  ) {}
+
+  /** The CCTP message for a burn, or null while Circle has not indexed it (HTTP 404). */
+  async getMessage(sourceDomain: number, burnTxHash: string): Promise<IrisMessage | null> {
+    const url = `${this.baseUrl}/v2/messages/${sourceDomain}?transactionHash=${encodeURIComponent(burnTxHash)}`;
+    const res = await this.limiter.run(() =>
+      this.fetchImpl(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(this.timeoutMs) }),
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Circle messages API returned HTTP ${res.status}`);
+    const parsed = MessagesResponse.parse(await res.json());
+    return parsed.messages[0] ?? null;
+  }
+}

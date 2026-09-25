@@ -3,7 +3,8 @@ import { createApp } from "./app.js";
 import { createDb } from "./db/client.js";
 import { buildChainRegistry } from "./chains/registry.js";
 import { startIdempotencySweeper } from "./middleware/idempotency.js";
-import { IRIS_BASE_URL, IrisClient } from "./circle/iris.js";
+import { IRIS_BASE_URL, IrisClient, IrisMessagesClient } from "./circle/iris.js";
+import { startTracker } from "./tracker/tracker.js";
 import { TokenBucket } from "./lib/tokenBucket.js";
 
 function configOrExit(): Config {
@@ -26,6 +27,14 @@ if (registry.missingSpeed.length > 0) {
 startIdempotencySweeper(db);
 const circleLimiter = new TokenBucket(config.CIRCLE_MAX_RPS * 2, config.CIRCLE_MAX_RPS);
 const iris = new IrisClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], circleLimiter);
+
+if (config.TRACKER_ENABLED) {
+  const messages = new IrisMessagesClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], circleLimiter);
+  startTracker({ db, registry, messages }, config.TRACKER_INTERVAL_MS);
+  console.log(`tracker: on, every ${Math.round(config.TRACKER_INTERVAL_MS / 1000)}s while awake`);
+} else {
+  console.log("tracker: off (TRACKER_ENABLED=false)");
+}
 
 createApp(config, db, registry, iris).listen(config.PORT, () => {
   console.log(`confluence-api [${config.CONFLUENCE_ENV}] listening on :${config.PORT}`);

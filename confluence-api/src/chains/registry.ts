@@ -20,6 +20,8 @@ export interface BridgeChain {
   rpcUrls: string[];
   /** Whether Circle's Forwarding Service can mint on this chain as the destination. */
   forwarderAsDestination: boolean;
+  /** CCTP v2 MessageTransmitter (destination mints), from App Kit; null if not listed. */
+  messageTransmitter: string | null;
   /** Source-side attestation times from Circle's docs; null when not listed. */
   speed: FinalityInfo | null;
 }
@@ -29,6 +31,13 @@ export interface ChainRegistry {
   readonly byId: ReadonlyMap<string, BridgeChain>;
   /** Supported chains that have no entry in the finality table (shown without ETA). */
   readonly missingSpeed: readonly string[];
+}
+
+/** App Kit's v2 contract block is either "split" (with messageTransmitter) or merged. */
+function messageTransmitterOf(cctp: unknown): string | null {
+  const v2 = (cctp as { contracts?: { v2?: Record<string, unknown> } } | undefined)?.contracts?.v2;
+  const addr = v2?.["messageTransmitter"];
+  return typeof addr === "string" && /^0x[0-9a-fA-F]{40}$/.test(addr) ? addr : null;
 }
 
 /**
@@ -51,6 +60,7 @@ export function buildChainRegistry(config: Config, kit: Pick<AppKit, "getSupport
       nativeCurrency: { name: c.nativeCurrency.name, symbol: c.nativeCurrency.symbol, decimals: c.nativeCurrency.decimals },
       rpcUrls: [...c.rpcEndpoints],
       forwarderAsDestination: c.cctp.forwarderSupported.destination,
+      messageTransmitter: messageTransmitterOf(c.cctp),
       speed: finalityFor(c.chain),
     });
   }
