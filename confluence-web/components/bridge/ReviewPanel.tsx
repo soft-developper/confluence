@@ -80,6 +80,8 @@ export interface ReviewPanelProps {
   onSwitch: () => void;
   /** Native gas balance on the destination (base units), when the user mints themselves. */
   destinationGas: bigint | undefined;
+  /** Source-chain gas notice (warn only), rendered before signing. */
+  sourceGasWarning?: React.ReactNode;
   onBack: () => void;
   onConfirm: () => void;
   onRetry: () => void;
@@ -222,6 +224,7 @@ export function ReviewPanel(p: ReviewPanelProps) {
             <span className="mt-px shrink-0 text-action-text">{Icon.info}</span>
             <span>{signNote}</span>
           </div>
+          {p.sourceGasWarning}
           {noGas && (
             <div role="status" className="rounded-md border border-warning bg-bg p-3 text-[13px]">
               You have no {to.nativeCurrency.symbol} on {to.name} to pay gas for the mint. Add some before the attestation arrives, or go back and

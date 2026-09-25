@@ -14,6 +14,8 @@ import type { BridgeChain } from "@/lib/chains";
 import { ChainDot } from "./ChainDot";
 import { ChainPicker } from "./ChainPicker";
 import { ReviewPanel } from "./ReviewPanel";
+import { GasWarning } from "./GasWarning";
+import { estimateSourceGas } from "@/lib/sourceGas";
 
 const AMOUNT_INPUT = /^(\d{0,12})(\.\d{0,6})?$/;
 const isArc = (c: BridgeChain) => c.id === "Arc" || c.id === "Arc_Testnet";
@@ -199,6 +201,32 @@ export function BridgeCard() {
     if (execPhase === "success") void refetchBalance();
   }, [execPhase, refetchBalance]);
 
+  // Source-chain native gas (approve and burn). CCTP never pays it, so warn when low.
+  const sourceGas = useBalance({ address, chainId: from?.evmChainId, query: { enabled: !!address && !!from } });
+  const gasQuote = execPhase === "idle" ? quote : undefined;
+  const gasEstimate = useQuery({
+    queryKey: ["source-gas", gasQuote?.id],
+    queryFn: async () =>
+      gasQuote && from && to && address && connector
+        ? estimateSourceGas({
+            provider: await connector.getProvider(),
+            registry: chains,
+            from,
+            to,
+            sender: address,
+            recipient: gasQuote.recipient,
+            amountUsdc: gasQuote.amount.usdc,
+            speed: gasQuote.speed,
+            useForwarder: gasQuote.useForwarder,
+            customFee: gasQuote.customFee,
+          })
+        : null,
+    // Only in review, on the source chain, before signing: the estimate loads App Kit.
+    enabled: reviewing && !!gasQuote && !!connector && !!from && chainId === from.evmChainId,
+    staleTime: 60_000,
+    retry: false,
+  });
+
   const reviewForwarding = frozenQuote?.useForwarder ?? quote?.useForwarder ?? false;
   const destGas = useBalance({
     address,
@@ -298,6 +326,9 @@ export function BridgeCard() {
           switching={switching}
           onSwitch={() => switchChain({ chainId: from.evmChainId })}
           destinationGas={destGas.data?.value}
+          sourceGasWarning={
+            execPhase === "idle" ? <GasWarning chain={from} balanceWei={sourceGas.data?.value} estimate={gasEstimate.data} /> : null
+          }
           onBack={leaveReview}
           onConfirm={confirmBridge}
           onRetry={() => void exec.retry()}
@@ -508,6 +539,10 @@ export function BridgeCard() {
             )}
           </div>
         </div>
+      )}
+
+      {from && status === "connected" && chainId === from.evmChainId && (
+        <GasWarning chain={from} balanceWei={sourceGas.data?.value} />
       )}
 
       <button
