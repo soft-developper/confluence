@@ -91,6 +91,8 @@ export function quoteErrorText(e: unknown): string {
         return "This route is not configured yet.";
       case "id_not_found":
         return "That Confluence ID does not exist. Check the spelling.";
+      case "maintenance":
+        return e.message || "Bridging is temporarily offline for maintenance.";
       case "rate_limited":
         return "Too many quote requests. Wait a minute and try again.";
       default:
@@ -165,6 +167,8 @@ export function transferErrorText(e: unknown): string {
         return "The connected wallet changed. Go back and review again.";
       case "rate_limited":
         return "Too many attempts. Wait a minute and try again.";
+      case "maintenance":
+        return e.message || "This is temporarily offline for maintenance.";
       default:
         return e.message;
     }
@@ -452,4 +456,19 @@ export async function fetchFooter(): Promise<FooterContent> {
   const res = await fetch(`${publicEnv.apiUrl}/site/footer`);
   if (!res.ok) throw await readError(res);
   return FooterSchema.parse(await res.json()).settings;
+}
+
+// ---------- site status (maintenance switches, A2) ----------
+
+export const SiteStatusSchema = z.object({
+  bridge: z.object({ online: z.boolean(), message: z.string().nullable(), expectedBack: z.string().nullable() }),
+  swap: z.object({ online: z.boolean(), message: z.string().nullable(), expectedBack: z.string().nullable() }),
+  updatedAt: z.string().nullable(),
+});
+export type SiteStatus = z.infer<typeof SiteStatusSchema>;
+
+export async function fetchSiteStatus(): Promise<SiteStatus> {
+  const res = await fetch(`${publicEnv.apiUrl}/site/status`, { cache: "no-store" });
+  if (!res.ok) throw await readError(res);
+  return SiteStatusSchema.parse(await res.json());
 }

@@ -1,6 +1,7 @@
 import { AppHeader } from "@/components/AppHeader";
 import { Providers } from "@/components/Providers";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MaintenanceBanner } from "@/components/Maintenance";
 
 /** Every page: providers, header, page content, footer. */
 export function PageShell({ children }: { children: React.ReactNode }) {
@@ -8,6 +9,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
     <Providers>
       <div className="flex min-h-screen flex-col">
         <AppHeader />
+        <MaintenanceBanner />
         <main className="flex flex-1 flex-col items-center gap-4 px-4 pt-10 pb-16">{children}</main>
         <SiteFooter />
       </div>
