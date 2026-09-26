@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { fetchChains } from "@/lib/chains";
@@ -18,6 +18,7 @@ import {
   type Treasury,
 } from "@/lib/adminApi";
 import { Bars, Btn, ErrorText, Field, inputCls, Panel, Stat } from "./ui";
+import { Pager, paginate } from "@/components/Pager";
 
 const TABS = ["Overview", "Activity", "Problems", "Treasury", "Maintenance", "Footer", "Account"] as const;
 type Tab = (typeof TABS)[number];
@@ -218,26 +219,20 @@ function ActivityTab() {
   const [q, setQ] = useState("");
   const [applied, setApplied] = useState("");
   const [kind, setKind] = useState<"" | "bridge" | "swap">("");
-  const [pages, setPages] = useState<ActivityItem[][]>([]);
-  const [next, setNext] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
   const { name, tx } = useChainNames();
-  const params = (before?: number) => {
-    const p = new URLSearchParams({ limit: "50" });
+  const params = () => {
+    const p = new URLSearchParams({ page: String(page) });
     if (applied) p.set("q", applied);
     if (kind) p.set("kind", kind);
-    if (before) p.set("before", String(before));
     return p.toString();
   };
   const first = useQuery({
-    queryKey: ["admin-activity", applied, kind],
-    queryFn: async () => {
-      const r = await adminFetch<{ items: ActivityItem[]; nextBefore: number | null }>(`/admin/activity?${params()}`);
-      setPages([]);
-      setNext(r.nextBefore);
-      return r.items;
-    },
+    queryKey: ["admin-activity", applied, kind, page],
+    queryFn: () => adminFetch<{ items: ActivityItem[]; page: number; pageSize: number; total: number; totalPages: number }>(`/admin/activity?${params()}`),
+    placeholderData: keepPreviousData,
   });
-  const items = [...(first.data ?? []), ...pages.flat()];
+  const items = first.data?.items ?? [];
   return (
     <Panel title="Activity">
       <form
@@ -245,10 +240,14 @@ function ActivityTab() {
         onSubmit={(e) => {
           e.preventDefault();
           setApplied(q.trim());
+          setPage(1);
         }}
       >
         <input className={`${inputCls} max-w-[420px] flex-1`} placeholder="Search id, wallet, tx hash or @id" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className={`${inputCls} w-auto`} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Kind">
+        <select className={`${inputCls} w-auto`} value={kind} onChange={(e) => {
+            setKind(e.target.value as typeof kind);
+            setPage(1);
+          }} aria-label="Kind">
           <option value="">Bridges and swaps</option>
           <option value="bridge">Bridges</option>
           <option value="swap">Swaps</option>
@@ -303,17 +302,8 @@ function ActivityTab() {
         </table>
       </div>
       {!first.isPending && items.length === 0 && <p className="text-sm text-ink-muted">Nothing found.</p>}
-      {next && (
-        <Btn
-          kind="secondary"
-          onClick={async () => {
-            const r = await adminFetch<{ items: ActivityItem[]; nextBefore: number | null }>(`/admin/activity?${params(next)}`);
-            setPages((p) => [...p, r.items]);
-            setNext(r.nextBefore);
-          }}
-        >
-          Load more
-        </Btn>
+      {first.data && (
+        <Pager page={first.data.page} totalPages={first.data.totalPages} total={first.data.total} pageSize={first.data.pageSize} onPage={setPage} busy={first.isFetching} />
       )}
     </Panel>
   );
@@ -322,13 +312,15 @@ function ActivityTab() {
 // ---------- problems ----------
 
 function ProblemsTab({ items, loading }: { items: Problem[] | undefined; loading: boolean }) {
+  const [page, setPage] = useState(1);
+  const pg = paginate(items ?? [], page);
   return (
     <Panel title="Problem queue">
       <p className="text-xs text-ink-muted">Transfers and swaps that need attention. Refreshes every minute.</p>
       {loading && <p className="text-sm text-ink-muted">Loading...</p>}
       {items && items.length === 0 && <p className="text-sm text-destination-text">Nothing needs attention.</p>}
       <ul className="flex flex-col">
-        {items?.map((p) => (
+        {pg.slice.map((p) => (
           <li key={`${p.kind}-${p.id}`} className="flex flex-col gap-0.5 border-t border-border py-2 text-sm first:border-t-0">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">{p.reason}</span>
@@ -348,6 +340,7 @@ function ProblemsTab({ items, loading }: { items: Problem[] | undefined; loading
           </li>
         ))}
       </ul>
+      <Pager page={pg.page} totalPages={pg.totalPages} total={pg.total} onPage={setPage} />
     </Panel>
   );
 }
@@ -357,6 +350,8 @@ function ProblemsTab({ items, loading }: { items: Problem[] | undefined; loading
 function TreasuryTab() {
   const q = useQuery({ queryKey: ["admin-treasury"], queryFn: () => adminFetch<Treasury>("/admin/treasury"), staleTime: 60_000 });
   const t = q.data;
+  const [page, setPage] = useState(1);
+  const pg = paginate(t?.chains ?? [], page);
   return (
     <Panel title="Fee treasury" actions={<Btn kind="secondary" onClick={() => void q.refetch()} disabled={q.isFetching}>{q.isFetching ? "Reading chains..." : "Refresh"}</Btn>}>
       <p className="text-xs text-ink-muted">Live USDC balance of the fee recipient on every chain, read from each chain, next to the fees our records say were earned there.</p>
@@ -380,7 +375,7 @@ function TreasuryTab() {
                 </tr>
               </thead>
               <tbody>
-                {t.chains.map((c) => (
+                {pg.slice.map((c) => (
                   <tr key={c.chain} className="border-t border-border">
                     <td className="py-1.5">{c.name}</td>
                     <td className="py-1.5 font-mono text-xs">
@@ -394,6 +389,7 @@ function TreasuryTab() {
               </tbody>
             </table>
           </div>
+          <Pager page={pg.page} totalPages={pg.totalPages} total={pg.total} onPage={setPage} />
           <p className="text-xs text-ink-muted">Sweeping fees to one place is a later step.</p>
         </>
       )}

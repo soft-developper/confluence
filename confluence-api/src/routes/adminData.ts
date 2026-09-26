@@ -96,8 +96,7 @@ export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
           q: z.string().max(100).optional(),
           kind: z.enum(["bridge", "swap"]).optional(),
           state: z.string().regex(/^[A-Z_]{3,30}$/).optional(),
-          before: z.coerce.number().int().positive().optional(),
-          limit: z.coerce.number().int().min(1).max(100).default(50),
+          page: z.coerce.number().int().min(1).max(100_000).default(1),
         })
         .parse(req.query);
       res.json(await activity(d.db, q));

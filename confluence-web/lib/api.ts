@@ -398,10 +398,12 @@ export const HistoryItemSchema = z.object({
 });
 export type HistoryItem = z.infer<typeof HistoryItemSchema>;
 
-export async function fetchHistory(token: string, before?: string) {
-  const q = new URLSearchParams({ limit: "20", ...(before ? { before } : {}) });
-  const j = await (await authed(token, `/me/history?${q}`)).json();
-  return z.object({ items: z.array(HistoryItemSchema), nextBefore: z.string().nullable() }).parse(j);
+/** One numbered page (20 items) of the wallet's history; page 1 is the newest. */
+export async function fetchHistory(token: string, page: number) {
+  const j = await (await authed(token, `/me/history?page=${page}`)).json();
+  return z
+    .object({ items: z.array(HistoryItemSchema), page: z.number(), pageSize: z.number(), total: z.number(), totalPages: z.number() })
+    .parse(j);
 }
 
 const BookEntry = z.object({

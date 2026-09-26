@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, count, eq, inArray, or, sql } from "drizzle-orm";
 import { getAddress, isAddress } from "viem";
 import type { Db } from "../db/client.js";
 import { accounts, addressBookEntries, swaps, transfers } from "../db/schema.js";
@@ -112,23 +112,33 @@ export interface HistoryItem {
 }
 
 /** The signed-in wallet's bridges and swaps, newest first; `before` pages backwards. */
-export async function history(db: Db, address: string, opts: { limit: number; before?: Date | undefined }) {
-  const lim = Math.min(Math.max(opts.limit, 1), 50);
+export const HISTORY_PAGE_SIZE = 20;
+
+/**
+ * The wallet's bridges (sent and received) and swaps, newest first, one numbered page at
+ * a time (20 per page). New activity lands on page 1 and pushes older items to later pages.
+ */
+export async function history(db: Db, address: string, opts: { page: number; pageSize?: number }) {
+  const lim = Math.min(Math.max(opts.pageSize ?? HISTORY_PAGE_SIZE, 1), 50);
+  const pageNo = Math.max(1, Math.floor(opts.page));
+  const offset = (pageNo - 1) * lim;
   // Outgoing (this wallet sent) and incoming (this wallet was paid).
   const owner = or(sql`lower(${transfers.sender}) = ${address}`, sql`lower(${transfers.recipient}) = ${address}`)!;
-  const t = await db
-    .select()
-    .from(transfers)
-    .where(opts.before ? and(owner, lt(transfers.createdAt, opts.before)) : owner)
-    .orderBy(desc(transfers.createdAt))
-    .limit(lim);
   const swapOwner = sql`lower(${swaps.sender}) = ${address}`;
-  const s = await db
-    .select()
-    .from(swaps)
-    .where(opts.before ? and(swapOwner, lt(swaps.createdAt, opts.before)) : swapOwner)
-    .orderBy(desc(swaps.createdAt))
-    .limit(lim);
+  const [{ n: nT } = { n: 0 }] = await db.select({ n: count() }).from(transfers).where(owner);
+  const [{ n: nS } = { n: 0 }] = await db.select({ n: count() }).from(swaps).where(swapOwner);
+  const total = Number(nT) + Number(nS);
+  const pageRefs = (await db.all(
+    sql`select 'bridge' as kind, id, created_at as at from transfers
+          where lower(sender) = ${address} or lower(recipient) = ${address}
+        union all
+        select 'swap' as kind, id, created_at as at from swaps where lower(sender) = ${address}
+        order by at desc, id desc limit ${lim} offset ${offset}`,
+  )) as { kind: string; id: string }[];
+  const tIds = pageRefs.filter((r) => r.kind === "bridge").map((r) => r.id);
+  const sIds = pageRefs.filter((r) => r.kind === "swap").map((r) => r.id);
+  const t = tIds.length ? await db.select().from(transfers).where(inArray(transfers.id, tIds)) : [];
+  const s = sIds.length ? await db.select().from(swaps).where(inArray(swaps.id, sIds)) : [];
   // Confluence IDs of people who paid this wallet.
   const payers = [...new Set(t.filter((x) => x.sender.toLowerCase() !== address).map((x) => x.sender.toLowerCase()))];
   const payerIds = new Map(
@@ -181,12 +191,12 @@ export async function history(db: Db, address: string, opts: { limit: number; be
     })),
   ];
   items.sort((a, b) => b.at - a.at || b.id.localeCompare(a.id));
-  const page = items.slice(0, lim);
-  const more = items.length > lim || t.length === lim || s.length === lim;
-  const last = page.at(-1);
   return {
-    items: page.map(({ at: _at, ...rest }) => rest),
-    nextBefore: more && last ? last.createdAt : null,
+    items: items.map(({ at: _at, ...rest }) => rest),
+    page: pageNo,
+    pageSize: lim,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / lim)),
   };
 }
 

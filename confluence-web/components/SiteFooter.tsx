@@ -5,29 +5,17 @@ import Link from "next/link";
 import { fetchFooter, type FooterContent } from "@/lib/api";
 import { publicEnv } from "@/lib/env";
 import { useBridgeChains } from "@/components/Providers";
-import { ApiStatus } from "@/components/ApiStatus";
-import pkg from "../package.json";
+import { Mark } from "@/components/BrandMarks";
 
 /**
  * Site footer. Editable content (built by, privacy, terms, copyright, socials, network
  * override) comes from the API's footer settings, edited from the admin dashboard, and
- * each item stays hidden until it is set. The rest is automatic.
+ * each item stays hidden until it is set. The rest is automatic. Built by, Privacy, Terms
+ * and the copyright line sit in the first column, under the network badge.
  */
 function Watermark() {
-  // The Confluence mark (public/confluence-mark.svg) drawn large and faint behind the footer.
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="75 48 540 666"
-      className="pointer-events-none absolute -right-10 -bottom-24 h-[360px] w-auto opacity-[0.07] dark:opacity-[0.09] sm:h-[440px]"
-    >
-      <g fill="none" strokeLinecap="round" strokeWidth="64">
-        <path d="M115 88C115 190 175 238 245 297C305 348 342 390 342 492" stroke="#2F80EC" />
-        <path d="M568 88C568 190 508 240 440 298C380 350 342 392 342 492" stroke="#18B6A7" />
-        <path d="M342 498V670" stroke="#5D5AEF" />
-      </g>
-    </svg>
-  );
+  // The same mark as the page background, a little stronger inside the footer.
+  return <Mark className="absolute -right-10 -bottom-24 h-[360px] w-auto opacity-[0.07] dark:opacity-[0.09] sm:h-[440px]" />;
 }
 
 function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -92,6 +80,16 @@ export function SiteFooter() {
                 )}
               </span>
             )}
+            {legal.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+                {legal.map((item, i) => (
+                  <span key={i} className="flex items-center gap-2">
+                    {i > 0 && <span aria-hidden="true">•</span>}
+                    {item}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <nav aria-label="Footer" className="flex flex-col gap-2 text-sm text-ink-muted">
@@ -119,20 +117,6 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-border pt-5 text-xs text-ink-muted sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {legal.map((item, i) => (
-              <span key={i} className="flex items-center gap-3">
-                {i > 0 && <span aria-hidden="true">•</span>}
-                {item}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <ApiStatus compact />
-            <span className="font-mono">v{pkg.version}</span>
-          </div>
-        </div>
       </div>
     </footer>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { BackgroundMarks } from "@/components/BrandMarks";
 
 // Never indexed, never linked from the public site.
 export const metadata: Metadata = {
@@ -10,7 +11,8 @@ export const metadata: Metadata = {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="relative isolate flex min-h-screen flex-col">
+      <BackgroundMarks />
       <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-4 sm:px-6">
         <Link href="/admin" className="flex items-center gap-2 font-medium">
           {/* eslint-disable-next-line @next/next/no-img-element */}

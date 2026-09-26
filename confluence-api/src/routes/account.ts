@@ -97,15 +97,14 @@ export function accountRouter(db: Db, config: Config, registry: ChainRegistry) {
     }
   });
   router.get("/me/history", auth, async (req, res, next) => {
-    const limit = Number(req.query.limit ?? 20);
-    const beforeRaw = typeof req.query.before === "string" ? req.query.before : undefined;
-    const before = beforeRaw ? new Date(beforeRaw) : undefined;
-    if (!Number.isFinite(limit) || (before && Number.isNaN(before.getTime()))) {
-      res.status(400).json({ error: "invalid_request", message: "limit must be a number and before an ISO date" });
+    // Numbered pages of 20 (Stage: pagination). ?page=1 is the newest.
+    const page = Number(req.query.page ?? 1);
+    if (!Number.isInteger(page) || page < 1 || page > 100_000) {
+      res.status(400).json({ error: "invalid_request", message: "page must be a positive whole number" });
       return;
     }
     try {
-      res.json(await history(db, req.session!.address, { limit, before }));
+      res.json(await history(db, req.session!.address, { page }));
     } catch (e) {
       next(e);
     }

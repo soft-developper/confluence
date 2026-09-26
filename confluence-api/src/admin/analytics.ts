@@ -160,15 +160,21 @@ export interface ActivityQuery {
   q?: string | undefined;
   kind?: "bridge" | "swap" | undefined;
   state?: string | undefined;
-  before?: number | undefined;
-  limit: number;
+  page: number;
+  pageSize?: number;
 }
 
-/** Latest bridges and swaps; `q` matches an id prefix, a wallet, or a transaction hash. */
+export const ACTIVITY_PAGE_SIZE = 20;
+
+/**
+ * Latest bridges and swaps, one numbered page at a time (20 per page), with the exact
+ * total. `q` matches an id prefix, a wallet, a transaction hash or an @ID.
+ */
 export async function activity(db: Db, a: ActivityQuery) {
-  const lim = Math.min(Math.max(a.limit, 1), 100);
+  const lim = Math.min(Math.max(a.pageSize ?? ACTIVITY_PAGE_SIZE, 1), 100);
+  const page = Math.max(1, Math.floor(a.page));
+  const offset = (page - 1) * lim;
   const q = a.q?.trim().toLowerCase();
-  const before = a.before ?? Number.MAX_SAFE_INTEGER;
   const tq = q
     ? sql`and (id like ${q + "%"} or lower(sender) = ${q} or lower(recipient) = ${q} or lower(coalesce(burn_tx_hash,'')) = ${q} or lower(coalesce(mint_tx_hash,'')) = ${q} or coalesce(recipient_id,'') = ${q.replace(/^@/, "")})`
     : sql``;
@@ -176,45 +182,35 @@ export async function activity(db: Db, a: ActivityQuery) {
     ? sql`and (id like ${q + "%"} or lower(sender) = ${q} or lower(recipient) = ${q} or lower(coalesce(swap_tx_hash,'')) = ${q})`
     : sql``;
   const st = a.state ? sql`and state = ${a.state}` : sql``;
-  const bridges =
-    a.kind === "swap"
-      ? []
-      : await all(
-          db,
-          sql`select 'bridge' as kind, id, state, created_at as at, source_chain as source, destination_chain as destination,
-                sender, recipient, recipient_id as recipientId, amount_base as amount, platform_fee_base as fee, error_code as errorCode, burn_tx_hash as txHash
-              from transfers where created_at < ${before} ${tq} ${st} order by created_at desc limit ${lim}`,
-        );
-  const swaps =
-    a.kind === "bridge"
-      ? []
-      : await all(
-          db,
-          sql`select 'swap' as kind, id, state, created_at as at, chain as source, destination_chain as destination,
-                sender, recipient, token_in as tokenIn, token_out as tokenOut, amount_in as amount, fee_charged as fee, error_code as errorCode, swap_tx_hash as txHash
-              from swaps where created_at < ${before} ${sq} ${st} order by created_at desc limit ${lim}`,
-        );
-  const items = [...bridges, ...swaps]
-    .sort((x, y) => num(y.at) - num(x.at))
-    .slice(0, lim)
-    .map((r) => ({
-      kind: String(r.kind) as "bridge" | "swap",
-      id: String(r.id),
-      state: String(r.state),
-      createdAt: new Date(num(r.at)).toISOString(),
-      source: String(r.source),
-      destination: r.destination == null ? null : String(r.destination),
-      sender: String(r.sender),
-      recipient: String(r.recipient),
-      recipientId: r.recipientId == null ? null : String(r.recipientId),
-      amount: r.kind === "bridge" ? formatUsdc(big(r.amount)) : String(r.amount),
-      token: r.kind === "bridge" ? "USDC" : `${String(r.tokenIn)} → ${String(r.tokenOut)}`,
-      fee: r.fee == null ? null : r.kind === "bridge" ? formatUsdc(big(r.fee)) : String(r.fee),
-      errorCode: r.errorCode == null ? null : String(r.errorCode),
-      txHash: r.txHash == null ? null : String(r.txHash),
-    }));
-  const last = items.at(-1);
-  return { items, nextBefore: items.length === lim && last ? new Date(last.createdAt).getTime() : null };
+  const bridgeSel = sql`select 'bridge' as kind, id, state, created_at as at, source_chain as source, destination_chain as destination,
+      sender, recipient, recipient_id as recipientId, null as tokenIn, null as tokenOut, amount_base as amount, platform_fee_base as fee,
+      error_code as errorCode, burn_tx_hash as txHash
+    from transfers where 1 = 1 ${tq} ${st}`;
+  const swapSel = sql`select 'swap' as kind, id, state, created_at as at, chain as source, destination_chain as destination,
+      sender, recipient, null as recipientId, token_in as tokenIn, token_out as tokenOut, amount_in as amount, fee_charged as fee,
+      error_code as errorCode, swap_tx_hash as txHash
+    from swaps where 1 = 1 ${sq} ${st}`;
+  const union = a.kind === "bridge" ? bridgeSel : a.kind === "swap" ? swapSel : sql`${bridgeSel} union all ${swapSel}`;
+  const [{ n } = { n: 0 }] = await all(db, sql`select count(*) as n from (${union})`);
+  const rows = await all(db, sql`select * from (${union}) order by at desc, id desc limit ${lim} offset ${offset}`);
+  const total = num(n);
+  const items = rows.map((r) => ({
+    kind: String(r.kind) as "bridge" | "swap",
+    id: String(r.id),
+    state: String(r.state),
+    createdAt: new Date(num(r.at)).toISOString(),
+    source: String(r.source),
+    destination: r.destination == null ? null : String(r.destination),
+    sender: String(r.sender),
+    recipient: String(r.recipient),
+    recipientId: r.recipientId == null ? null : String(r.recipientId),
+    amount: r.kind === "bridge" ? formatUsdc(big(r.amount)) : String(r.amount),
+    token: r.kind === "bridge" ? "USDC" : `${String(r.tokenIn)} → ${String(r.tokenOut)}`,
+    fee: r.fee == null ? null : r.kind === "bridge" ? formatUsdc(big(r.fee)) : String(r.fee),
+    errorCode: r.errorCode == null ? null : String(r.errorCode),
+    txHash: r.txHash == null ? null : String(r.txHash),
+  }));
+  return { items, page, pageSize: lim, total, totalPages: Math.max(1, Math.ceil(total / lim)) };
 }
 
 // ---------- problem queue ----------

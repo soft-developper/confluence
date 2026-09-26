@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useConnection } from "wagmi";
@@ -22,6 +22,7 @@ import { ConnectModal } from "@/components/wallet/ConnectModal";
 import { SYNC_EVENT } from "@/components/SessionSync";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useSignIn } from "@/hooks/useSignIn";
+import { Pager } from "@/components/Pager";
 
 const ID_RULE = /^[a-z0-9_]{3,20}$/;
 
@@ -267,21 +268,21 @@ const STATE_LABEL: Record<string, string> = {
 function HistoryCard({ token, address }: { token: string; address: string }) {
   const { chains } = useBridgeChains();
   const nameOf = (id: string | null) => (id ? (chains.find((c) => c.id === id)?.name ?? id) : "");
-  const q = useInfiniteQuery({
-    queryKey: ["history", address],
-    queryFn: async ({ pageParam }) => {
+  const [page, setPage] = useState(1);
+  const q = useQuery({
+    queryKey: ["history", address, page],
+    queryFn: async () => {
       try {
-        return await fetchHistory(token, pageParam ?? undefined);
+        return await fetchHistory(token, page);
       } catch (e) {
         if (e instanceof SessionExpiredError) clearSession();
         throw e;
       }
     },
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.nextBefore,
+    placeholderData: keepPreviousData,
     retry: false,
   });
-  const items = q.data?.pages.flatMap((p) => p.items) ?? [];
+  const items = q.data?.items ?? [];
 
   return (
     <Card title="History">
@@ -290,21 +291,12 @@ function HistoryCard({ token, address }: { token: string; address: string }) {
       {!q.isPending && items.length === 0 && !q.isError && (
         <p className="text-sm text-ink-muted">No bridges or swaps from this wallet yet.</p>
       )}
-      <ul className="flex flex-col">
+      <ul className={`flex flex-col ${q.isFetching && q.isPlaceholderData ? "opacity-60" : ""}`}>
         {items.map((it) => (
           <HistoryRow key={`${it.kind}-${it.id}`} it={it} nameOf={nameOf} chains={chains} />
         ))}
       </ul>
-      {q.hasNextPage && (
-        <button
-          type="button"
-          onClick={() => void q.fetchNextPage()}
-          disabled={q.isFetchingNextPage}
-          className="h-10 rounded-md border border-border-control text-sm font-medium hover:border-action-text"
-        >
-          {q.isFetchingNextPage ? "Loading..." : "Load more"}
-        </button>
-      )}
+      {q.data && <Pager page={q.data.page} totalPages={q.data.totalPages} total={q.data.total} pageSize={q.data.pageSize} onPage={setPage} busy={q.isFetching} />}
     </Card>
   );
 }
