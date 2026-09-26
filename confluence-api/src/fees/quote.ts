@@ -19,12 +19,6 @@ export interface QuoteInput {
   recipient?: string | undefined;
   /** Stage 8a: pay a Confluence ID; resolved here, never trusted from the browser. */
   recipientId?: string | undefined;
-  /**
-   * Stage 8b: paying a payment request. Set by the API (never the browser): fixed payee,
-   * and `receiveAtLeast` makes this function size the amount so the estimated amount
-   * received covers the request (Circle's fees are taken out of the amount sent).
-   */
-  request?: { id: string; recipient: string; recipientId: string | null; receiveAtLeast: bigint } | undefined;
   speed: "FAST" | "SLOW";
   useForwarder: boolean;
 }
@@ -68,15 +62,13 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     throw new QuoteError(400, "forwarding_not_supported", `Circle Forwarding is not available with ${destination.name} as destination`);
   }
 
-  let amount = 0n;
-  if (!input.request) {
-    try {
-      amount = parseUsdc(input.amount);
-    } catch {
-      throw new QuoteError(400, "invalid_amount", "amount must be a positive USDC value with at most 6 decimals");
-    }
-    if (amount <= 0n) throw new QuoteError(400, "invalid_amount", "amount must be greater than 0");
+  let amount: bigint;
+  try {
+    amount = parseUsdc(input.amount);
+  } catch {
+    throw new QuoteError(400, "invalid_amount", "amount must be a positive USDC value with at most 6 decimals");
   }
+  if (amount <= 0n) throw new QuoteError(400, "invalid_amount", "amount must be greater than 0");
 
   const feeRecipient = await activeFeeRecipient(db, source.id);
   if (!feeRecipient) throw new QuoteError(503, "fee_recipient_not_configured", `no fee recipient configured for ${source.id}`);
@@ -90,13 +82,11 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
 
   const bps = input.speed === "FAST" ? routeFees.fastBps : routeFees.standardBps;
   if (bps == null) throw new QuoteError(502, "circle_fees_unavailable", `Circle returned no ${input.speed} fee for this route`);
+  const cctpFee = mulDivCeil(amount, BigInt(Math.round(bps * 100)), 1_000_000n); // bps may be fractional
   const forwardingFee = input.useForwarder
     ? ((input.speed === "FAST" ? routeFees.forwardFeeFast : routeFees.forwardFeeStandard) ?? null)
     : 0n;
   if (forwardingFee == null) throw new QuoteError(502, "circle_fees_unavailable", "Circle returned no forwarding fee for this route");
-  const bpsMicros = BigInt(Math.round(bps * 100)); // fee per 1,000,000 (bps may be fractional)
-  if (input.request) amount = grossUp(input.request.receiveAtLeast, bpsMicros, forwardingFee);
-  const cctpFee = mulDivCeil(amount, bpsMicros, 1_000_000n);
 
   const platformFee = calculatePlatformFee(amount);
   const totalDebit = amount + platformFee;
@@ -105,9 +95,9 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
 
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + QUOTE_TTL_MS);
-  let recipient = input.request?.recipient ?? input.recipient ?? input.sender;
-  let recipientId: string | null = input.request?.recipientId ?? null;
-  if (input.recipientId !== undefined && !input.request) {
+  let recipient = input.recipient ?? input.sender;
+  let recipientId: string | null = null;
+  if (input.recipientId !== undefined) {
     if (input.recipient) throw new QuoteError(400, "recipient_conflict", "send either recipient or recipientId, not both");
     const handle = normalizeId(input.recipientId);
     const acct = idProblem(handle) ? undefined : await db.query.accounts.findFirst({ where: eq(accounts.confluenceId, handle) });
@@ -123,7 +113,6 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     sender: input.sender,
     recipient,
     recipientId,
-    requestId: input.request?.id ?? null,
     amountBase: amount.toString(),
     platformFeeBase: platformFee.toString(),
     cctpFeeBase: cctpFee.toString(),
@@ -142,7 +131,6 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     sender: input.sender,
     recipient,
     recipientId,
-    requestId: input.request?.id ?? null,
     speed: input.speed,
     useForwarder: input.useForwarder,
     eta: (input.speed === "FAST" ? source.speed?.fast : source.speed?.standard)?.label ?? null,
@@ -156,16 +144,4 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     customFee: { value: formatUsdc(platformFee), recipientAddress: feeRecipient },
     platformFeeNet: money(netPlatformFee(platformFee)),
   };
-}
-
-/**
- * Smallest amount whose estimated receive (amount - CCTP fee - forwarding fee) is at
- * least `receive`. CCTP fee = ceil(amount * bpsMicros / 1e6), as above.
- */
-export function grossUp(receive: bigint, bpsMicros: bigint, forwardingFee: bigint): bigint {
-  const fee = (a: bigint) => mulDivCeil(a, bpsMicros, 1_000_000n);
-  let a = ((receive + forwardingFee) * 1_000_000n + (1_000_000n - bpsMicros - 1n)) / (1_000_000n - bpsMicros);
-  while (a - fee(a) - forwardingFee < receive) a += 1n;
-  while (a > 1n && a - 1n - fee(a - 1n) - forwardingFee >= receive) a -= 1n;
-  return a;
 }

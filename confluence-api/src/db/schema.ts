@@ -37,8 +37,6 @@ export const quotes = sqliteTable(
     recipient: text("recipient").notNull(),
     // Stage 8a: the Confluence ID the payer chose; the API resolved it to `recipient`.
     recipientId: text("recipient_id"),
-    // Stage 8b: set when paying a payment request.
-    requestId: text("request_id"),
     amountBase: text("amount_base").notNull(),
     platformFeeBase: text("platform_fee_base").notNull(),
     cctpFeeBase: text("cctp_fee_base").notNull(),
@@ -65,8 +63,6 @@ export const transfers = sqliteTable(
     recipient: text("recipient").notNull(),
     // Stage 8a: copied from the quote.
     recipientId: text("recipient_id"),
-    // Stage 8b: set when paying a payment request.
-    requestId: text("request_id"),
     amountBase: text("amount_base").notNull(),
     platformFeeBase: text("platform_fee_base").notNull(),
     speed: text("speed", { enum: TRANSFER_SPEEDS }).notNull(),
@@ -90,7 +86,6 @@ export const transfers = sqliteTable(
     index("transfers_state_idx").on(t.state),
     index("transfers_sender_idx").on(t.sender),
     index("transfers_tracked_at_idx").on(t.trackedAt),
-    index("transfers_request_id_idx").on(t.requestId),
   ],
 );
 
@@ -261,28 +256,4 @@ export const addressBookEntries = sqliteTable(
     deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
   },
   (t) => [uniqueIndex("address_book_owner_address_uq").on(t.owner, t.address)],
-);
-
-// ---------- payment requests (Stage 8b) ----------
-
-/**
- * Fixed amount, paid once (locked decision). Status is derived when read: paid when a
- * transfer made from the request reached COMPLETED; otherwise open, expired or cancelled.
- */
-export const paymentRequests = sqliteTable(
-  "payment_requests",
-  {
-    id: text("id").primaryKey(),
-    creator: text("creator")
-      .notNull()
-      .references(() => accounts.address), // lowercase; also the payee
-    payeeId: text("payee_id"), // creator's Confluence ID at creation, for display
-    destinationChain: text("destination_chain").notNull(),
-    amountBase: text("amount_base").notNull(), // USDC the payee must receive (estimated)
-    memo: text("memo"),
-    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-    cancelledAt: integer("cancelled_at", { mode: "timestamp_ms" }),
-    createdAt: createdAt(),
-  },
-  (t) => [index("payment_requests_creator_idx").on(t.creator)],
 );

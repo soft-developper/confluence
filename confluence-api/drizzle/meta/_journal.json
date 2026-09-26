@@ -57,6 +57,13 @@
       "when": 1790357572968,
       "tag": "0007_payment_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790363240165,
+      "tag": "0008_drop_payment_requests",
+      "breakpoints": true
     }
   ]
 }
