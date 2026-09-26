@@ -26,6 +26,18 @@ const EnvSchema = z
       .default("")
       .transform((s) => s.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean))
       .pipe(z.array(z.string().regex(/^0x[0-9a-f]{40}$/, "each admin must be a 0x address"))),
+    // ---- Admin dashboard (A1) ----
+    // 32 random bytes, base64: encrypts the admin TOTP secret at rest. Admin login is
+    // disabled until it is set. Generate: openssl rand -base64 32
+    ADMIN_SECRET_KEY: optionalString,
+    // Public web origin used in admin emails (password reset links), e.g.
+    // https://confluence-web.vercel.app. Defaults to the first CORS origin.
+    ADMIN_WEB_ORIGIN: optionalString,
+    // Resend (https://resend.com/docs/api-reference/emails/send-email). Emails are skipped
+    // (and logged) until both are set. EMAIL_FROM must use a domain verified in Resend,
+    // e.g. "Confluence Security <security@yourdomain.com>".
+    RESEND_API_KEY: optionalString,
+    EMAIL_FROM: optionalString,
     // Turso database for THIS environment (one database per environment).
     TURSO_DATABASE_URL: z
       .string()

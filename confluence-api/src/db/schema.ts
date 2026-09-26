@@ -270,3 +270,78 @@ export const siteSettings = sqliteTable("site_settings", {
   updatedBy: text("updated_by"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
 });
+
+// ---------- admin dashboard (A1) ----------
+
+/** The single owner account (email + password + TOTP). */
+export const adminUsers = sqliteTable(
+  "admin_users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(), // lowercase
+    passwordHash: text("password_hash").notNull(), // scrypt, self-describing format
+    passwordChangedAt: integer("password_changed_at", { mode: "timestamp_ms" }).notNull(),
+    // TOTP secret, AES-256-GCM encrypted with ADMIN_SECRET_KEY. Pending until confirmed.
+    totpSecretEnc: text("totp_secret_enc"),
+    totpPendingEnc: text("totp_pending_enc"),
+    totpEnabledAt: integer("totp_enabled_at", { mode: "timestamp_ms" }),
+    totpLastStep: integer("totp_last_step"), // a code's 30s step can be used only once
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    lockedUntil: integer("locked_until", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("admin_users_email_uq").on(t.email)],
+);
+
+export const adminBackupCodes = sqliteTable(
+  "admin_backup_codes",
+  {
+    id: text("id").primaryKey(),
+    adminId: text("admin_id")
+      .notNull()
+      .references(() => adminUsers.id),
+    codeHash: text("code_hash").notNull(), // sha256 of the normalized code
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("admin_backup_codes_admin_idx").on(t.adminId)],
+);
+
+/**
+ * Admin sessions. `stage`: "totp" (password ok, code pending), "setup" (password ok,
+ * authenticator not set up yet), "active" (fully signed in). Idle timeout 1 hour.
+ */
+export const adminSessions = sqliteTable(
+  "admin_sessions",
+  {
+    id: text("id").primaryKey(),
+    adminId: text("admin_id")
+      .notNull()
+      .references(() => adminUsers.id),
+    tokenHash: text("token_hash").notNull(),
+    stage: text("stage", { enum: ["totp", "setup", "active"] }).notNull(),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    lastActivityAt: integer("last_activity_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("admin_sessions_token_hash_uq").on(t.tokenHash), index("admin_sessions_admin_idx").on(t.adminId)],
+);
+
+/** Password reset links: single use, 15 minutes, only the sha256 is stored. */
+export const adminResetTokens = sqliteTable(
+  "admin_reset_tokens",
+  {
+    id: text("id").primaryKey(),
+    adminId: text("admin_id")
+      .notNull()
+      .references(() => adminUsers.id),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("admin_reset_tokens_hash_uq").on(t.tokenHash)],
+);

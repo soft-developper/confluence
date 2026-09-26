@@ -15,7 +15,10 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "fees:set-recipient": "tsx src/scripts/setFeeRecipient.ts",
-    "tracker:once": "tsx src/scripts/trackOnce.ts"
+    "tracker:once": "tsx src/scripts/trackOnce.ts",
+    "admin:create": "tsx src/scripts/adminCli.ts create",
+    "admin:reset-2fa": "tsx src/scripts/adminCli.ts reset-2fa",
+    "admin:unlock": "tsx src/scripts/adminCli.ts unlock"
   },
   "dependencies": {
     "@circle-fin/app-kit": "^1.15.2",
