@@ -13,7 +13,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="relative isolate flex min-h-screen flex-col">
       <BackgroundMarks />
-      <header className="flex h-16 items-center justify-between gap-3 border-b border-border px-4 sm:px-6">
+      {/* Locked at the top while scrolling; the dashboard's section tabs lock right under it. */}
+      <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-3 border-b border-border bg-bg/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-bg/80 sm:px-6">
         <Link href="/admin" className="flex items-center gap-2 font-medium">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/confluence-mark.svg" alt="" width={24} height={24} />

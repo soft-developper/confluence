@@ -18,7 +18,8 @@
     "tracker:once": "tsx src/scripts/trackOnce.ts",
     "admin:create": "tsx src/scripts/adminCli.ts create",
     "admin:reset-2fa": "tsx src/scripts/adminCli.ts reset-2fa",
-    "admin:unlock": "tsx src/scripts/adminCli.ts unlock"
+    "admin:unlock": "tsx src/scripts/adminCli.ts unlock",
+    "prune:once": "tsx src/scripts/pruneOnce.ts"
   },
   "dependencies": {
     "@circle-fin/app-kit": "^1.15.2",

@@ -133,6 +133,12 @@ export interface Maintenance {
   state: { bridge: SwitchState; swap: SwitchState; all: SwitchState };
   updatedAt: string | null;
   updatedBy: string | null;
+  housekeeping?: {
+    lastRunAt: string | null;
+    lastRun: { transfers: number; swaps: number };
+    totalPruned: { transfers: number; swaps: number };
+    pruneAfterHours: number;
+  };
 }
 export interface FooterSettings {
   builtBy: { name: string; url?: string } | null;

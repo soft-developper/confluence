@@ -50,6 +50,12 @@ const EnvSchema = z
     CIRCLE_MAX_RPS: z.coerce.number().positive().max(15).default(10),
     // Stage 4 tracker: checks unfinished transfers against Circle and the chain while
     // the API is awake. "false" turns it off (for example when running two instances).
+    // Housekeeping: prune failed records that never reached the chain, 24h after failing.
+    PRUNE_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((v) => v === "true"),
+    PRUNE_INTERVAL_MS: z.coerce.number().int().min(300_000).max(86_400_000).default(3_600_000),
     TRACKER_ENABLED: z
       .enum(["true", "false"])
       .default("true")

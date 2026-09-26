@@ -6,6 +6,7 @@ import { buildChainRegistry } from "./chains/registry.js";
 import { startIdempotencySweeper } from "./middleware/idempotency.js";
 import { IRIS_BASE_URL, IrisClient, IrisMessagesClient } from "./circle/iris.js";
 import { startTracker } from "./tracker/tracker.js";
+import { startHousekeeping } from "./housekeeping/pruneFailed.js";
 import { TokenBucket } from "./lib/tokenBucket.js";
 
 function configOrExit(): Config {
@@ -28,6 +29,13 @@ if (registry.missingSpeed.length > 0) {
 startIdempotencySweeper(db);
 const circleLimiter = new TokenBucket(config.CIRCLE_MAX_RPS * 2, config.CIRCLE_MAX_RPS);
 const iris = new IrisClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], circleLimiter);
+
+if (config.PRUNE_ENABLED) {
+  startHousekeeping(db, config.PRUNE_INTERVAL_MS);
+  console.log(`housekeeping: pruning failed records every ${Math.round(config.PRUNE_INTERVAL_MS / 60_000)} min`);
+} else {
+  console.log("housekeeping: off (PRUNE_ENABLED=false)");
+}
 
 if (config.TRACKER_ENABLED) {
   const messages = new IrisMessagesClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], circleLimiter);

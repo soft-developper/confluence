@@ -7,6 +7,7 @@ import { securityEmail } from "../email/resend.js";
 import { requireAdminSession } from "../middleware/adminSession.js";
 import { saveFooter } from "../site/footer.js";
 import { effective, getMaintenance, SetSwitchBody, setMaintenance } from "../site/maintenance.js";
+import { getHousekeeping, PRUNE_AFTER_MS } from "../housekeeping/pruneFailed.js";
 
 /** Admin dashboard data and controls (A2). Every route needs a fully signed-in admin. */
 export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
@@ -34,7 +35,7 @@ export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
     active,
     handle(async (_req, res) => {
       const m = await getMaintenance(d.db);
-      res.json({ ...m, status: effective(m.state) });
+      res.json({ ...m, status: effective(m.state), housekeeping: { ...(await getHousekeeping(d.db)), pruneAfterHours: PRUNE_AFTER_MS / 3_600_000 } });
     }),
   );
   router.put(

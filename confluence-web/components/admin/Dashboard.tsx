@@ -47,7 +47,8 @@ export function Dashboard({ email, onSignOut }: { email: string; onSignOut: () =
   const count = problemsQ.data?.items.length ?? 0;
   return (
     <div className="flex w-full max-w-[1100px] flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Section tabs lock under the admin header (h-16) as one bar while scrolling. */}
+      <div className="sticky top-16 z-30 -mx-4 -mt-8 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-bg/90 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-bg/80 sm:-mx-6 sm:px-6">
         <nav aria-label="Admin sections" className="flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
@@ -417,6 +418,19 @@ function MaintenanceTab() {
         <p className="text-xs text-ink-muted">
           Last changed {new Date(m.updatedAt).toLocaleString()} by {m.updatedBy}.
         </p>
+      )}
+      {m?.housekeeping && (
+        <Panel title="Housekeeping">
+          <p className="text-sm text-ink-muted">
+            Failed bridges and swaps that never reached the chain are deleted {m.housekeeping.pruneAfterHours} hours after they fail, to keep the database
+            small. Anything with a transaction, in progress, or needing recovery is always kept.
+          </p>
+          <p className="font-mono text-xs text-ink-muted">
+            {m.housekeeping.lastRunAt
+              ? `Last run ${new Date(m.housekeeping.lastRunAt).toLocaleString()}: removed ${m.housekeeping.lastRun.transfers} transfers, ${m.housekeeping.lastRun.swaps} swaps. Total removed: ${m.housekeeping.totalPruned.transfers} transfers, ${m.housekeeping.totalPruned.swaps} swaps.`
+              : "Not run yet (it runs about a minute after the API starts, then every hour)."}
+          </p>
+        </Panel>
       )}
     </div>
   );
