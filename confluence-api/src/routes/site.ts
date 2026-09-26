@@ -1,12 +1,9 @@
 import { Router } from "express";
-import { ZodError } from "zod";
-import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
-import { requireAdmin } from "../middleware/admin.js";
-import { requireAuth } from "../middleware/auth.js";
-import { getFooter, saveFooter } from "../site/footer.js";
+import { getFooter } from "../site/footer.js";
+import { effective, getMaintenance } from "../site/maintenance.js";
 
-export function siteRouter(db: Db, config: Config) {
+export function siteRouter(db: Db) {
   const router = Router();
 
   // Public: the web footer reads this on every page (cached briefly by browsers and CDNs).
@@ -18,15 +15,12 @@ export function siteRouter(db: Db, config: Config) {
     }
   });
 
-  // Admin dashboard: replace the footer content (validated, https links only).
-  router.put("/admin/site/footer", requireAuth(db), requireAdmin(config.ADMIN_ADDRESSES), async (req, res, next) => {
+  // Public: which parts are online, and the maintenance message users should see.
+  router.get("/site/status", async (_req, res, next) => {
     try {
-      res.json(await saveFooter(db, req.body, req.session!.address));
+      const m = await getMaintenance(db);
+      res.set("Cache-Control", "public, max-age=15").json({ ...effective(m.state), updatedAt: m.updatedAt });
     } catch (e) {
-      if (e instanceof ZodError) {
-        res.status(400).json({ error: "invalid_request", issues: e.issues.map((i) => ({ path: i.path.join("."), message: i.message })) });
-        return;
-      }
       next(e);
     }
   });

@@ -12,6 +12,8 @@ import { swapsRouter } from "./routes/swaps.js";
 import { accountRouter } from "./routes/account.js";
 import { siteRouter } from "./routes/site.js";
 import { adminRouter } from "./routes/admin.js";
+import { adminDataRouter } from "./routes/adminData.js";
+import { maintenanceGuard } from "./site/maintenance.js";
 import { createEmailSender } from "./email/resend.js";
 import { buildSwapRegistry, type SwapRegistry } from "./swaps/tokens.js";
 import type { IrisClient } from "./circle/iris.js";
@@ -56,6 +58,7 @@ export function createApp(
 
   app.use(ipRateLimit());
   app.use(express.json({ limit: "100kb" }));
+  app.use(maintenanceGuard(db));
   app.use(healthRouter(config, db));
   app.use(chainsRouter(config, registry));
   app.use(quotesRouter(db, registry, iris));
@@ -63,15 +66,15 @@ export function createApp(
   app.use(transfersRouter(db));
   app.use(swapsRouter(db, swapRegistry));
   app.use(accountRouter(db, config, registry));
-  app.use(siteRouter(db, config));
-  app.use(
-    adminRouter({
-      db,
-      secretKey: config.ADMIN_SECRET_KEY,
-      webOrigin: config.ADMIN_WEB_ORIGIN ?? config.CORS_ORIGINS[0]!,
-      sendEmail: createEmailSender({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }),
-    }),
-  );
+  app.use(siteRouter(db));
+  const adminDeps = {
+    db,
+    secretKey: config.ADMIN_SECRET_KEY,
+    webOrigin: config.ADMIN_WEB_ORIGIN ?? config.CORS_ORIGINS[0]!,
+    sendEmail: createEmailSender({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }),
+  };
+  app.use(adminRouter(adminDeps));
+  app.use(adminDataRouter(adminDeps, registry));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });
