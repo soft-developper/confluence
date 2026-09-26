@@ -19,6 +19,13 @@ const EnvSchema = z
       .min(1)
       .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean))
       .pipe(z.array(origin).min(1)),
+    // Wallets allowed to use admin endpoints (for example editing the footer), comma
+    // separated. Empty = no admins. They must also be signed in (Sign-In with Ethereum).
+    ADMIN_ADDRESSES: z
+      .string()
+      .default("")
+      .transform((s) => s.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean))
+      .pipe(z.array(z.string().regex(/^0x[0-9a-f]{40}$/, "each admin must be a 0x address"))),
     // Turso database for THIS environment (one database per environment).
     TURSO_DATABASE_URL: z
       .string()

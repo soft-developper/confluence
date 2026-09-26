@@ -257,3 +257,16 @@ export const addressBookEntries = sqliteTable(
   },
   (t) => [uniqueIndex("address_book_owner_address_uq").on(t.owner, t.address)],
 );
+
+// ---------- site settings (footer now, admin dashboard later) ----------
+
+/**
+ * Small key/value store for content the admin dashboard edits (for example the footer).
+ * `value` is JSON validated by the API before it is written.
+ */
+export const siteSettings = sqliteTable("site_settings", {
+  key: text("key").primaryKey(),
+  value: text("value", { mode: "json" }).notNull(),
+  updatedBy: text("updated_by"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
+});

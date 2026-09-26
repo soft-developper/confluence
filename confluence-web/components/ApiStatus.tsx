@@ -10,7 +10,8 @@ type Status =
   | { kind: "mismatch"; env: string }
   | { kind: "unreachable"; reason: string };
 
-export function ApiStatus() {
+/** `compact` renders a one-line status with a dot (used in the footer). */
+export function ApiStatus({ compact = false }: { compact?: boolean } = {}) {
   const [status, setStatus] = useState<Status>({ kind: "checking" });
 
   useEffect(() => {
@@ -35,6 +36,25 @@ export function ApiStatus() {
       ctrl.abort();
     };
   }, []);
+
+  if (compact) {
+    const [dot, label] =
+      status.kind === "ok"
+        ? ["bg-destination", `API connected · database ok`]
+        : status.kind === "checking"
+          ? ["bg-border-control", "API checking..."]
+          : status.kind === "db_down"
+            ? ["bg-warning", "API up · database unreachable"]
+            : status.kind === "mismatch"
+              ? ["bg-danger", `API environment mismatch (${status.env})`]
+              : ["bg-danger", "API unreachable"];
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-xs text-ink-muted" role="status" aria-live="polite">
+        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden="true" />
+        {label}
+      </span>
+    );
+  }
 
   const base = "mt-6 rounded-md border px-3 py-2 font-mono text-[13px]";
   switch (status.kind) {

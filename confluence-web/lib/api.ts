@@ -431,3 +431,25 @@ export async function lookupConfluenceId(handle: string): Promise<{ handle: stri
   if (!res.ok) throw await readError(res);
   return z.object({ handle: z.string(), address: z.string() }).parse(await res.json());
 }
+
+// ---------- site footer (content edited from the admin dashboard) ----------
+
+const HttpsLink = z.string().url();
+export const FooterSchema = z.object({
+  settings: z.object({
+    builtBy: z.object({ name: z.string(), url: HttpsLink.optional() }).nullable(),
+    privacyUrl: HttpsLink.nullable(),
+    termsUrl: HttpsLink.nullable(),
+    copyright: z.string().nullable(),
+    socials: z.array(z.object({ label: z.string(), url: HttpsLink })),
+    network: z.object({ label: z.string(), url: HttpsLink.optional() }).nullable(),
+  }),
+  updatedAt: z.string().nullable(),
+});
+export type FooterContent = z.infer<typeof FooterSchema>["settings"];
+
+export async function fetchFooter(): Promise<FooterContent> {
+  const res = await fetch(`${publicEnv.apiUrl}/site/footer`);
+  if (!res.ok) throw await readError(res);
+  return FooterSchema.parse(await res.json()).settings;
+}
