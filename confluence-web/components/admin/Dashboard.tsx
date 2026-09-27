@@ -422,12 +422,13 @@ function MaintenanceTab() {
       {m?.housekeeping && (
         <Panel title="Housekeeping">
           <p className="text-sm text-ink-muted">
-            Failed bridges and swaps that never reached the chain are deleted {m.housekeeping.pruneAfterHours} hours after they fail, to keep the database
-            small. Anything with a transaction, in progress, or needing recovery is always kept.
+            Failed bridges and swaps that never reached the chain are deleted {m.housekeeping.pruneAfterHours} hours after they fail, and quotes nobody
+            used are deleted an hour after they expire, to keep the database small. Anything with a transaction, in progress, or needing recovery is
+            always kept.
           </p>
           <p className="font-mono text-xs text-ink-muted">
             {m.housekeeping.lastRunAt
-              ? `Last run ${new Date(m.housekeeping.lastRunAt).toLocaleString()}: removed ${m.housekeeping.lastRun.transfers} transfers, ${m.housekeeping.lastRun.swaps} swaps. Total removed: ${m.housekeeping.totalPruned.transfers} transfers, ${m.housekeeping.totalPruned.swaps} swaps.`
+              ? `Last run ${new Date(m.housekeeping.lastRunAt).toLocaleString()}: removed ${m.housekeeping.lastRun.transfers} transfers, ${m.housekeeping.lastRun.swaps} swaps, ${m.housekeeping.lastRun.unusedQuotes.toLocaleString()} unused quotes. Total removed: ${m.housekeeping.totalPruned.transfers} transfers, ${m.housekeeping.totalPruned.swaps} swaps, ${m.housekeeping.totalPruned.unusedQuotes.toLocaleString()} unused quotes.`
               : "Not run yet (it runs about a minute after the API starts, then every hour)."}
           </p>
         </Panel>

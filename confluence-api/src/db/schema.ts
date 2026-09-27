@@ -47,7 +47,8 @@ export const quotes = sqliteTable(
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index("quotes_sender_idx").on(t.sender)],
+  // expires_at index: housekeeping finds expired, unused quotes without scanning the table.
+  (t) => [index("quotes_sender_idx").on(t.sender), index("quotes_expires_at_idx").on(t.expiresAt)],
 );
 
 export const transfers = sqliteTable(

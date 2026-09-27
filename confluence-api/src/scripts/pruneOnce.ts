@@ -18,7 +18,7 @@ const db = createDb(config);
 const r = await pruneFailed(db, { dryRun, log: (m) => console.log(m) });
 console.log(
   dryRun
-    ? `[${config.CONFLUENCE_ENV}] dry run: would prune ${r.transfers} failed transfers and ${r.swaps} failed swaps (never reached the chain, failed over 24h ago)`
-    : `[${config.CONFLUENCE_ENV}] pruned ${r.transfers} failed transfers and ${r.swaps} failed swaps (${r.events} events, ${r.quotes} quotes)`,
+    ? `[${config.CONFLUENCE_ENV}] dry run: would prune ${r.transfers} failed transfers and ${r.swaps} failed swaps (never reached the chain, failed over 24h ago), and ${r.unusedQuotes} unused quotes (expired over 1h ago)`
+    : `[${config.CONFLUENCE_ENV}] pruned ${r.transfers} failed transfers and ${r.swaps} failed swaps (${r.events} events, ${r.quotes} quotes), and ${r.unusedQuotes} unused quotes`,
 );
 db.$client.close();

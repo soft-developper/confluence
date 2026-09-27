@@ -135,8 +135,8 @@ export interface Maintenance {
   updatedBy: string | null;
   housekeeping?: {
     lastRunAt: string | null;
-    lastRun: { transfers: number; swaps: number };
-    totalPruned: { transfers: number; swaps: number };
+    lastRun: { transfers: number; swaps: number; unusedQuotes: number };
+    totalPruned: { transfers: number; swaps: number; unusedQuotes: number };
     pruneAfterHours: number;
   };
 }

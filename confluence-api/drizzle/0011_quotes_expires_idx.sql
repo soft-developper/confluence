@@ -1,0 +1,1 @@
+CREATE INDEX `quotes_expires_at_idx` ON `quotes` (`expires_at`);
