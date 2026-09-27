@@ -43,12 +43,15 @@ function messageTransmitterOf(cctp: unknown): string | null {
 /**
  * Builds the bridge chain list from the installed App Kit SDK, never a hard-coded list.
  * v1 is EVM only; testnet builds only see testnets and mainnet only mainnets.
+ * Mainnet only offers chains where Circle's Forwarding Service can mint on the
+ * destination (confluence:mainnet-forwarding-only); testnet keeps every chain.
  */
 export function buildChainRegistry(config: Config, kit: Pick<AppKit, "getSupportedChains"> = new AppKit()): ChainRegistry {
   const wantTestnet = config.CONFLUENCE_ENV === "testnet";
   const chains: BridgeChain[] = [];
   for (const c of kit.getSupportedChains("bridge")) {
     if (c.type !== "evm" || c.isTestnet !== wantTestnet || !c.usdcAddress || !c.cctp) continue;
+    if (!wantTestnet && !c.cctp.forwarderSupported?.destination) continue;
     chains.push({
       id: c.chain,
       name: c.name,
