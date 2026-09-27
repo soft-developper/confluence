@@ -8,6 +8,8 @@ import { requireAdminSession } from "../middleware/adminSession.js";
 import { saveFooter } from "../site/footer.js";
 import { effective, getMaintenance, SetSwitchBody, setMaintenance } from "../site/maintenance.js";
 import { getHousekeeping, PRUNE_AFTER_MS } from "../housekeeping/pruneFailed.js";
+import { getDisabledChains, setChainEnabled } from "../chains/availability.js";
+import { sql } from "drizzle-orm";
 
 /** Admin dashboard data and controls (A2). Every route needs a fully signed-in admin. */
 export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
@@ -53,6 +55,63 @@ export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
       ]);
       void d.sendEmail({ to: req.admin!.email, subject: `Confluence: ${label} ${body.offline ? "offline" : "online"}`, ...e });
       res.json(out);
+    }),
+  );
+
+  // ---- bridge chains: take a chain out of the bridge, or put it back ----
+  router.get(
+    "/admin/chains",
+    active,
+    handle(async (_req, res) => {
+      const disabled = new Map((await getDisabledChains(d.db)).map((x) => [x.id, x]));
+      const t0 = Date.now() - 30 * 86_400_000;
+      const usage = (await d.db.all(
+        sql`select chain, sum(src) as asSource, sum(dst) as asDestination from (
+              select source_chain as chain, 1 as src, 0 as dst from transfers where created_at >= ${t0}
+              union all select destination_chain, 0, 1 from transfers where created_at >= ${t0}) group by chain`,
+      )) as { chain: string; asSource: number; asDestination: number }[];
+      const inflight = (await d.db.all(
+        sql`select chain, count(*) as n from (
+              select source_chain as chain from transfers where state not in ('COMPLETED','FAILED')
+              union all select destination_chain from transfers where state not in ('COMPLETED','FAILED')) group by chain`,
+      )) as { chain: string; n: number }[];
+      const u = new Map(usage.map((r) => [r.chain, r]));
+      const f = new Map(inflight.map((r) => [r.chain, Number(r.n)]));
+      res.json({
+        chains: registry.chains.map((c) => ({
+          id: c.id,
+          name: c.name,
+          evmChainId: c.evmChainId,
+          cctpDomain: c.cctpDomain,
+          fast: !!c.speed?.fast,
+          forwarding: !!c.forwarderAsDestination,
+          enabled: !disabled.has(c.id),
+          disabledAt: disabled.get(c.id)?.at ?? null,
+          disabledBy: disabled.get(c.id)?.by ?? null,
+          last30d: { asSource: Number(u.get(c.id)?.asSource ?? 0), asDestination: Number(u.get(c.id)?.asDestination ?? 0) },
+          inFlight: f.get(c.id) ?? 0,
+        })),
+      });
+    }),
+  );
+  router.put(
+    "/admin/chains/:id",
+    active,
+    handle(async (req, res) => {
+      const id = String(req.params.id);
+      const chain = registry.byId.get(id);
+      if (!chain) {
+        res.status(404).json({ error: "chain_not_found", message: "no such bridge chain" });
+        return;
+      }
+      const { enabled } = z.object({ enabled: z.boolean() }).strict().parse(req.body);
+      await setChainEnabled(d.db, id, enabled, req.admin!.email);
+      const e = securityEmail(`${chain.name} ${enabled ? "added back to" : "removed from"} the bridge`, [
+        `Changed by ${req.admin!.email} at ${new Date().toUTCString()}.`,
+        "Transfers already in flight are not affected.",
+      ]);
+      void d.sendEmail({ to: req.admin!.email, subject: `Confluence: ${chain.name} ${enabled ? "enabled" : "disabled"} for bridging`, ...e });
+      res.json({ id, enabled });
     }),
   );
 

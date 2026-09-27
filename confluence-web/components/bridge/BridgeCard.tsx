@@ -69,8 +69,11 @@ export function BridgeCard() {
   const { address, chainId, status, connector } = useConnection();
   const { mutate: switchChain, isPending: switching } = useSwitchChain();
 
-  const arc = useMemo(() => chains.find(isArc), [chains]);
-  const eth = useMemo(() => chains.find(isEthereum) ?? chains.find((c) => !isArc(c)), [chains]);
+  // Chains the admin has taken out of the bridge stay in `chains` (in-flight transfers need
+  // them) but are never offered in the pickers.
+  const pickable = useMemo(() => chains.filter((c) => c.bridgeEnabled), [chains]);
+  const arc = useMemo(() => pickable.find(isArc), [pickable]);
+  const eth = useMemo(() => pickable.find(isEthereum) ?? pickable.find((c) => !isArc(c)), [pickable]);
 
   const [fromId, setFromId] = useState<string | undefined>(eth?.id);
   const [toId, setToId] = useState<string | undefined>(arc?.id);
@@ -97,7 +100,7 @@ export function BridgeCard() {
   // Default route: From = wallet's chain, To = Arc (inbound). If the wallet is on Arc,
   // go Arc -> Ethereum instead. Applied until the user picks a route themselves.
   useEffect(() => {
-    if (routeTouched || !walletChain || !arc) return;
+    if (routeTouched || !walletChain || !walletChain.bridgeEnabled || !arc) return;
     if (isArc(walletChain)) {
       setFromId(walletChain.id);
       setToId(eth?.id);
@@ -106,6 +109,12 @@ export function BridgeCard() {
       setToId(arc.id);
     }
   }, [walletChain, arc, eth, routeTouched]);
+
+  // If a chosen chain is taken out of the bridge (the list refreshes), move off it.
+  useEffect(() => {
+    if (from && !from.bridgeEnabled) setFromId(pickable.find((c) => c.id !== toId)?.id);
+    if (to && !to.bridgeEnabled) setToId(pickable.find((c) => c.id !== fromId)?.id);
+  }, [from, to, pickable, fromId, toId]);
 
   // Keep speed and forwarding valid for the chosen chains.
   const fastAvailable = !!from?.speed?.fast;
@@ -567,7 +576,7 @@ export function BridgeCard() {
         open={picker !== null}
         title={picker === "from" ? "Select source chain" : "Select destination chain"}
         side={picker === "from" ? "source" : "destination"}
-        chains={chains}
+        chains={pickable}
         selectedId={picker === "from" ? fromId : toId}
         disabledId={undefined}
         onSelect={pick}

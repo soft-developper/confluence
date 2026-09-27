@@ -93,6 +93,8 @@ export function quoteErrorText(e: unknown): string {
         return "That Confluence ID does not exist. Check the spelling.";
       case "maintenance":
         return e.message || "Bridging is temporarily offline for maintenance.";
+      case "chain_disabled":
+        return e.message || "This chain is temporarily unavailable for bridging. Choose another.";
       case "rate_limited":
         return "Too many quote requests. Wait a minute and try again.";
       default:

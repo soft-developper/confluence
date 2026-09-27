@@ -19,6 +19,8 @@ export const BridgeChainSchema = z.object({
   rpcUrls: z.array(z.string().url()).min(1),
   forwarderAsDestination: z.boolean(),
   speed: z.object({ fast: Speed.nullable(), standard: Speed.nullable() }).nullable(),
+  /** false = the admin took this chain out of the bridge (still listed for in-flight transfers). */
+  bridgeEnabled: z.boolean().default(true),
 });
 export type BridgeChain = z.infer<typeof BridgeChainSchema>;
 

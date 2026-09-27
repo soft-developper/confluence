@@ -3,6 +3,7 @@ import { and, desc, eq, lte } from "drizzle-orm";
 import type { BridgeChain, ChainRegistry } from "../chains/registry.js";
 import { getAddress } from "viem";
 import { idProblem, normalizeId } from "../accounts/service.js";
+import { disabledChainIds } from "../chains/availability.js";
 import type { IrisClient } from "../circle/iris.js";
 import type { Db } from "../db/client.js";
 import { accounts, feeRecipients, quotes } from "../db/schema.js";
@@ -53,6 +54,11 @@ function chainOr400(registry: ChainRegistry, id: string, field: string): BridgeC
 export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisClient, input: QuoteInput) {
   const source = chainOr400(registry, input.sourceChain, "sourceChain");
   const destination = chainOr400(registry, input.destinationChain, "destinationChain");
+  // Admin chain switches: a chain taken out of the bridge is refused for new quotes.
+  const off = await disabledChainIds(db);
+  for (const c of [source, destination]) {
+    if (off.has(c.id)) throw new QuoteError(409, "chain_disabled", `${c.name} is temporarily unavailable for bridging`);
+  }
   if (source.id === destination.id) throw new QuoteError(400, "same_chain", "source and destination must differ");
 
   if (input.speed === "FAST" && !source.speed?.fast) {

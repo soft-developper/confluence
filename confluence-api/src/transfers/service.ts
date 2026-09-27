@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { quotes, transferEvents, transfers, type TransferState } from "../db/schema.js";
 import { formatUsdc } from "../lib/usdc.js";
 import { nextState, type StepName, type StepState } from "./stateMachine.js";
+import { disabledChainIds } from "../chains/availability.js";
 
 export class TransferError extends Error {
   constructor(
@@ -48,6 +49,11 @@ export async function createTransfer(db: Db, input: CreateTransferInput) {
     throw new TransferError(403, "quote_sender_mismatch", "quote belongs to a different sender");
   }
   if (quote.expiresAt.getTime() <= Date.now()) throw new TransferError(410, "quote_expired", "quote has expired; request a new one");
+  // A chain switched off after the quote was made: refuse before anything is signed.
+  const off = await disabledChainIds(db);
+  for (const c of [quote.sourceChain, quote.destinationChain]) {
+    if (off.has(c)) throw new TransferError(409, "chain_disabled", "this route is temporarily unavailable for bridging; request a new quote");
+  }
 
   const id = randomUUID();
   const token = randomBytes(32).toString("base64url");

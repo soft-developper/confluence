@@ -60,7 +60,7 @@ export function createApp(
   app.use(express.json({ limit: "100kb" }));
   app.use(maintenanceGuard(db));
   app.use(healthRouter(config, db));
-  app.use(chainsRouter(config, registry));
+  app.use(chainsRouter(config, registry, db));
   app.use(quotesRouter(db, registry, iris));
   app.use(feesRouter());
   app.use(transfersRouter(db));

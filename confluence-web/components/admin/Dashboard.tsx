@@ -20,7 +20,7 @@ import {
 import { Bars, Btn, ErrorText, Field, inputCls, Panel, Stat } from "./ui";
 import { Pager, paginate } from "@/components/Pager";
 
-const TABS = ["Overview", "Activity", "Problems", "Treasury", "Maintenance", "Footer", "Account"] as const;
+const TABS = ["Overview", "Activity", "Problems", "Treasury", "Chains", "Maintenance", "Footer", "Account"] as const;
 type Tab = (typeof TABS)[number];
 
 const pct = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
@@ -74,6 +74,7 @@ export function Dashboard({ email, onSignOut }: { email: string; onSignOut: () =
       {tab === "Activity" && <ActivityTab />}
       {tab === "Problems" && <ProblemsTab items={problemsQ.data?.items} loading={problemsQ.isPending} />}
       {tab === "Treasury" && <TreasuryTab />}
+      {tab === "Chains" && <ChainsTab />}
       {tab === "Maintenance" && <MaintenanceTab />}
       {tab === "Footer" && <FooterTab />}
       {tab === "Account" && <AccountTab />}
@@ -394,6 +395,121 @@ function TreasuryTab() {
           <p className="text-xs text-ink-muted">Sweeping fees to one place is a later step.</p>
         </>
       )}
+    </Panel>
+  );
+}
+
+// ---------- bridge chains ----------
+
+interface AdminChain {
+  id: string;
+  name: string;
+  evmChainId: number;
+  cctpDomain: number;
+  fast: boolean;
+  forwarding: boolean;
+  enabled: boolean;
+  disabledAt: string | null;
+  disabledBy: string | null;
+  last30d: { asSource: number; asDestination: number };
+  inFlight: number;
+}
+
+function ChainsTab() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["admin-chains-list"], queryFn: () => adminFetch<{ chains: AdminChain[] }>("/admin/chains") });
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const chains = q.data?.chains ?? [];
+  const enabledCount = chains.filter((c) => c.enabled).length;
+  const pg = paginate(chains, page);
+  async function toggle(c: AdminChain) {
+    setErr(null);
+    try {
+      await adminFetch(`/admin/chains/${encodeURIComponent(c.id)}`, { method: "PUT", body: { enabled: !c.enabled } });
+      setConfirm(null);
+      await qc.invalidateQueries({ queryKey: ["admin-chains-list"] });
+    } catch (e) {
+      setErr(errText(e));
+    }
+  }
+  return (
+    <Panel title="Bridge chains">
+      <p className="text-sm text-ink-muted">
+        Chains come from Circle App Kit automatically. Turning one off removes it from the Bridge (as source and destination) and the API refuses new
+        transfers that use it. Transfers already in flight keep working, including their transaction pages and Complete mint. Changes reach users
+        within about 30 seconds.
+      </p>
+      {enabledCount < 2 && chains.length > 0 && (
+        <p role="alert" className="rounded-md border border-warning bg-bg p-3 text-[13px]">
+          Fewer than two chains are on, so nobody can bridge right now.
+        </p>
+      )}
+      <ErrorText>{err}</ErrorText>
+      {q.isError && <ErrorText>{errText(q.error)}</ErrorText>}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead>
+            <tr className="text-left text-xs text-ink-muted">
+              <th className="py-1 font-medium">Chain</th>
+              <th className="py-1 font-medium">Supports</th>
+              <th className="py-1 text-right font-medium">Last 30 days (from / to)</th>
+              <th className="py-1 text-right font-medium">In flight</th>
+              <th className="py-1 text-right font-medium">Bridge</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pg.slice.map((c) => (
+              <tr key={c.id} className="border-t border-border align-middle">
+                <td className="py-2">
+                  <span className={c.enabled ? "" : "text-ink-muted line-through"}>{c.name}</span>
+                  <span className="block font-mono text-[11px] text-ink-muted">
+                    chain {c.evmChainId} · CCTP domain {c.cctpDomain}
+                  </span>
+                  {!c.enabled && c.disabledAt && (
+                    <span className="block text-[11px] text-warning">
+                      Off since {new Date(c.disabledAt).toLocaleString()} ({c.disabledBy})
+                    </span>
+                  )}
+                </td>
+                <td className="py-2 text-xs text-ink-muted">
+                  {c.fast ? "Fast" : "Standard only"}
+                  {c.forwarding ? ", forwarding" : ""}
+                </td>
+                <td className="tnum py-2 text-right font-mono text-xs">
+                  {n(c.last30d.asSource)} / {n(c.last30d.asDestination)}
+                </td>
+                <td className="tnum py-2 text-right font-mono text-xs">{c.inFlight ? <span className="text-action-text">{n(c.inFlight)}</span> : "0"}</td>
+                <td className="py-2 text-right">
+                  {confirm === c.id ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Btn kind={c.enabled ? "danger" : "primary"} onClick={() => void toggle(c)}>
+                        {c.enabled ? "Yes, turn off" : "Yes, turn on"}
+                      </Btn>
+                      <Btn kind="secondary" onClick={() => setConfirm(null)}>
+                        Cancel
+                      </Btn>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={c.enabled}
+                      aria-label={`${c.name} ${c.enabled ? "on" : "off"}`}
+                      onClick={() => setConfirm(c.id)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${c.enabled ? "bg-destination" : "bg-border-control"}`}
+                    >
+                      <span className={`inline-block h-5 w-5 rounded-full bg-surface shadow transition-transform ${c.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager page={pg.page} totalPages={pg.totalPages} total={pg.total} onPage={setPage} />
     </Panel>
   );
 }

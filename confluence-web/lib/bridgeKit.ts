@@ -1,5 +1,6 @@
 import { createPublicClient, fallback, http, type Chain, type EIP1193Provider, type PublicClient } from "viem";
 import type { BridgeChain } from "./chains";
+import { withChainAdd } from "./walletChains";
 
 /**
  * Circle App Kit in the browser. Loaded on demand (dynamic import) when the user
@@ -31,7 +32,8 @@ export async function loadBridgeKit(provider: EIP1193Provider, registry: readonl
   // A new adapter per bridge: the adapter caches the wallet account on first use,
   // so reusing one across account switches would sign with a stale account.
   const adapter = await createViemAdapterFromProvider({
-    provider,
+    // Wallets that do not know a chain yet get offered to add it, then switch.
+    provider: withChainAdd(provider, registry),
     getPublicClient,
     capabilities: { addressContext: "user-controlled" },
   });
