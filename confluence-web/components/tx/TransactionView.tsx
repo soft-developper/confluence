@@ -8,7 +8,7 @@ import { fetchTransfer, type TransferDetail } from "@/lib/api";
 import { shortAddress, type BridgeChain } from "@/lib/chains";
 import { fetchIrisMessage, FORWARD_DONE } from "@/lib/iris";
 import { isMessageReceived } from "@/lib/mintCheck";
-import { deriveTxView, expirationBlockOf, PHASE_LABEL, type TxView } from "@/lib/txStatus";
+import { deriveTxView, expirationBlockOf, PHASE_LABEL, type TxView, isForwardStalled } from "@/lib/txStatus";
 import { createPublicClient, fallback, http } from "viem";
 import { toViemChain } from "@/lib/chains";
 import { useBridgeChains } from "@/components/Providers";
@@ -78,12 +78,12 @@ export function TransactionView({ id }: { id: string }) {
   const nq = useQuery({
     queryKey: ["nonce-used", to?.id, nonce],
     queryFn: () => isMessageReceived(to!, nonce),
-    // Forwarding off, or Circle's forward failed: someone may have submitted the mint.
+    // Forwarding off, Circle's forward failed, or it stalled: someone may have submitted the mint.
     enabled:
       liveNeeded &&
       !!to &&
       iq.data?.status === "complete" &&
-      (!t?.useForwarder || iq.data?.forwardState === "FAILED" || t?.errorCode === "forward_failed"),
+      (!t?.useForwarder || iq.data?.forwardState === "FAILED" || t?.errorCode === "forward_failed" || (!!t && isForwardStalled(t, iq.data))),
     refetchInterval: (q) => (q.state.data === true ? false : 15_000),
   });
 
@@ -265,6 +265,13 @@ function Loaded({ t, from, to, view, irisError, onMinted }: { t: TransferDetail;
           {view.canCompleteMint ? " You can submit the mint yourself below." : " Waiting for Circle's attestation before you can submit it yourself."}
         </div>
       )}
+      {view.forwardStalled && !minted && (
+        <div role="alert" className="rounded-md border border-warning bg-bg p-3 text-[13px]">
+          Circle&apos;s Forwarding Service has not delivered the mint on {to.name} more than 30 minutes after attestation (the network may be slow or
+          down). Your USDC is burned and safe. You can keep waiting, or submit the mint yourself below: only one mint can ever succeed, so there is no
+          risk of paying twice.
+        </div>
+      )}
       {irisError && view.burned && !minted && (
         <p className="text-xs text-ink-muted">Could not reach Circle for live status; showing what Confluence recorded. Retrying.</p>
       )}
@@ -278,7 +285,7 @@ function Loaded({ t, from, to, view, irisError, onMinted }: { t: TransferDetail;
             </p>
           )}
           <p className="text-[13px]">
-            {view.forwardFailed ? "Anyone can submit this mint, so you can do it yourself. " : "Circle has attested this transfer. "}
+            {view.forwardFailed || view.forwardStalled ? "Anyone can submit this mint, so you can do it yourself. " : "Circle has attested this transfer. "}
             Submit the mint on {to.name} to receive the USDC
             {t.recipient.toLowerCase() !== t.sender.toLowerCase() ? ` at ${shortAddress(t.recipient)}` : ""}. Your wallet switches to {to.name} and
             asks you to sign once; gas is paid in {to.nativeCurrency.symbol}.

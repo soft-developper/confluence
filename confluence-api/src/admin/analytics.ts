@@ -219,14 +219,18 @@ export async function activity(db: Db, a: ActivityQuery) {
 export async function problems(db: Db, now = Date.now()) {
   const fastStuck = now - 60 * 60_000; // Fast should finish within minutes
   const slowStuck = now - 48 * 60 * 60_000; // Standard can take hours on some chains
+  // After attestation a mint should land within minutes at any speed (speed only affects
+  // attestation), so an attested transfer still not delivered after 30 minutes is stuck.
+  const deliveryStuck = now - 30 * 60_000;
   const t = await all(
     db,
-    sql`select id, state, error_code as errorCode, created_at as at, speed, source_chain as source, destination_chain as destination, sender, amount_base as amount
+    sql`select id, state, error_code as errorCode, created_at as at, updated_at as updatedAt, speed, source_chain as source, destination_chain as destination, sender, amount_base as amount
         from transfers
         where state = 'RECOVERY_REQUIRED'
            or error_code in ('forward_failed', 'burn_mismatch', 'burn_not_found')
            or (state in ('BURN_SUBMITTED', 'BURN_CONFIRMED', 'ATTESTATION_PENDING', 'ATTESTED', 'MINT_SUBMITTED')
                and ((speed = 'FAST' and created_at < ${fastStuck}) or (speed = 'SLOW' and created_at < ${slowStuck})))
+           or (state in ('ATTESTED', 'MINT_SUBMITTED') and updated_at < ${deliveryStuck})
         order by created_at desc limit 200`,
   );
   const s = await all(
@@ -238,6 +242,9 @@ export async function problems(db: Db, now = Date.now()) {
   );
   const reason = (r: Row, kind: "bridge" | "swap") => {
     const code = r.errorCode == null ? null : String(r.errorCode);
+    if (kind === "bridge" && (String(r.state) === "ATTESTED" || String(r.state) === "MINT_SUBMITTED") && num(r.updatedAt) < deliveryStuck) {
+      return "Attested but not delivered after 30 minutes (the destination network or Circle's forwarder may be down); the user can mint it themselves";
+    }
     if (kind === "swap") return code === "fee_mismatch" ? "Circle charged a different fee than ours" : "Swap submitted over an hour ago and not settled";
     if (code === "forward_failed") return "Circle's forwarded mint failed; the user can Complete mint";
     if (code === "burn_mismatch") return "Reported burn does not match the transfer";

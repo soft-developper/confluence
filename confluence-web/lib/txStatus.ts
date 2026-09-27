@@ -28,6 +28,8 @@ export interface TxView {
   mintedFrom: "database" | "circle" | "chain" | null;
   mintTxHash: string | null;
   forwardFailed: boolean;
+  /** Forwarding on, attested, but Circle's forwarder has not delivered after FORWARD_STALL_MS. */
+  forwardStalled: boolean;
   canCompleteMint: boolean;
   /** The attestation's expiration block has passed on the destination (Fast transfers only). */
   attestationExpired: boolean;
@@ -66,6 +68,30 @@ export function expirationBlockOf(iris: IrisMessage | null | undefined): bigint 
   return n === 0n ? null : n;
 }
 
+/**
+ * After attestation a forwarded mint normally lands within minutes, whatever the speed
+ * (speed only changes how long attestation takes). Past this, users may mint themselves.
+ */
+export const FORWARD_STALL_MS = 30 * 60_000;
+
+/** When the transfer became attested, as far as Confluence recorded it (ms), or null. */
+export function attestedAtMs(t: TransferDetail): number | null {
+  const ev = t.events.find((e) => e.toState === "ATTESTED");
+  if (ev) return new Date(ev.createdAt).getTime();
+  if (t.state === "ATTESTED" || t.state === "MINT_SUBMITTED") return new Date(t.updatedAt).getTime();
+  return null;
+}
+
+/** Forwarded, attested for over 30 minutes, and Circle has neither delivered nor failed it. */
+export function isForwardStalled(t: TransferDetail, iris: IrisMessage | null | undefined, now = Date.now()): boolean {
+  if (!t.useForwarder || !t.burnTxHash || t.state === "COMPLETED") return false;
+  if (iris?.forwardState === "FAILED" || t.errorCode === "forward_failed") return false;
+  if (FORWARD_DONE.has(iris?.forwardState ?? "")) return false;
+  const at = attestedAtMs(t);
+  const attested = at !== null || iris?.status === "complete";
+  return attested && at !== null && now - at > FORWARD_STALL_MS;
+}
+
 export function deriveTxView(
   t: TransferDetail,
   iris: IrisMessage | null | undefined,
@@ -93,10 +119,16 @@ export function deriveTxView(
   // Circle's own report, or the tracker's record of it (Stage 4a).
   const forwardFailed = t.useForwarder && (iris?.forwardState === "FAILED" || t.errorCode === "forward_failed") && !minted;
 
-  // Self-submitted mint: forwarding off, or Circle's forward failed (Stage 4b). Circle's docs:
-  // forwarded burns never set destinationCaller, so any wallet may submit the mint; checked anyway.
+  // Circle's forwarder still has not delivered 30 minutes after attestation (for example a
+  // destination network that is down). Minting yourself is safe: CCTP accepts each message
+  // once, so whichever mint lands first wins and any other is rejected.
+  const forwardStalled = !minted && isForwardStalled(t, iris, now);
+
+  // Self-submitted mint: forwarding off, Circle's forward failed (Stage 4b), or it stalled.
+  // Circle's docs: forwarded burns never set destinationCaller, so any wallet may submit the
+  // mint; checked anyway.
   const canCompleteMint =
-    (!t.useForwarder || forwardFailed) &&
+    (!t.useForwarder || forwardFailed || forwardStalled) &&
     burned &&
     attested &&
     !minted &&
@@ -110,7 +142,7 @@ export function deriveTxView(
   let phase: TxPhase;
   if (minted) phase = "complete";
   else if (t.state === "FAILED" && !burned) phase = "failed";
-  else if (forwardFailed) phase = "needs_attention";
+  else if (forwardFailed || forwardStalled) phase = "needs_attention";
   else if (attested) phase = t.useForwarder ? "minting" : "ready_to_mint";
   else if (burned) phase = "awaiting_attestation";
   else if (now - new Date(t.updatedAt).getTime() > ABANDONED_MS) phase = "not_sent";
@@ -126,6 +158,7 @@ export function deriveTxView(
     mintedFrom: minted ? (dbMinted ? "database" : irisMinted ? "circle" : "chain") : null,
     mintTxHash: t.mintTxHash ?? (irisMinted ? (iris?.forwardTxHash ?? null) : null),
     forwardFailed,
+    forwardStalled,
     canCompleteMint,
     attestationExpired,
     reachedAt,
