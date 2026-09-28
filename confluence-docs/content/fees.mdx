@@ -1,0 +1,68 @@
+---
+title: Fees
+description: What Confluence charges, what other services charge, and worked examples.
+---
+
+import { Callout } from "nextra/components";
+
+# Fees
+
+Every fee is shown on the quote before you sign, and nothing is charged until you confirm in your wallet. This page explains each one.
+
+## Bridge (CCTP)
+
+| Bridge amount | Confluence platform fee |
+| --- | --- |
+| Up to and including 1,000 USDC | **0.30 USDC** |
+| Over 1,000 USDC | **0.10% of the whole amount** |
+
+The platform fee is **added on top** of the amount you bridge. The review screen shows the bridge amount, the platform fee, and the **total debit**: what actually leaves your wallet.
+
+### Worked examples
+
+| You bridge | Platform fee | Total debit |
+| --- | --- | --- |
+| 50 USDC | 0.30 | 50.30 USDC |
+| 1,000 USDC | 0.30 | 1,000.30 USDC |
+| 1,000.01 USDC | 1.00001 | 1,001.01001 USDC |
+| 5,000 USDC | 5.00 | 5,005.00 USDC |
+
+<Callout type="info">
+  The fee steps up at 1,000 USDC: at exactly 1,000 it's 0.30, just above it's about 1.00. If you're close to the line, sending 1,000 or less
+  keeps the flat fee.
+</Callout>
+
+Percentage fees are rounded up to the smallest USDC unit (0.000001).
+
+### Costs from Circle and the network
+
+These are shown separately on the quote and aren't Confluence fees:
+
+- **CCTP fee (Fast only):** Circle's fee for Fast Transfer. Standard transfers have no CCTP fee.
+- **Forwarding fee (when Forwarding is on):** Circle's fee for delivering the mint on the destination chain. It's taken from the amount that arrives, so the quote's **expected receive** already accounts for it.
+- **Network gas:** paid by your wallet on the source chain for the approval and the burn, and on the destination chain if you complete a mint yourself. On Arc, gas is paid in USDC.
+
+## Swap
+
+Confluence's swap fee follows the same rule, applied to the token the fee is taken in (shown on the quote):
+
+- **Stablecoins** (USDC, EURC, USDT): 0.30 for amounts up to 1,000, and 0.10% of the whole amount above that.
+- **Any other token:** 0.10% of the amount.
+
+Circle's App Kit route and the network's gas are shown on the quote as well.
+
+## Relay routes
+
+- **Confluence fee:** a percentage of the value you send, shown on every Relay quote (0.10% by default). The rate on your quote is the one that applies.
+- **Relay's own costs**, each shown on the quote:
+  - **Execution cost:** gas and delivery on the route.
+  - **Swap cost:** the cost of any swap within the route.
+  - **Relay platform fee:** set by Relay and depending on the route. See Relay's [fee documentation](https://docs.relay.link/references/api/api_core_concepts/fees) for details.
+
+## Where Confluence's fees go
+
+Confluence's fees are collected by a **2-of-3 multisig** wallet, which needs two separate keys to move any funds. Fees from Relay routes are collected by Relay and claimed to the same multisig.
+
+<Callout type="warning">
+  Always check the **total debit** or **you pay** line before confirming. Blockchain transactions can't be reversed, and that includes fees.
+</Callout>

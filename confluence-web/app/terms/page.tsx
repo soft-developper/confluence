@@ -95,7 +95,7 @@ export default function TermsPage() {
         <Section title="Fees">
           <P>
             For each bridge, Confluence charges a platform fee of <B>0.30 USDC for amounts up to 1,000 USDC</B>, and{" "}
-            <B>0.10% of the amount above 1,000 USDC</B>. The platform fee is added to the amount you send, so the
+            <B>0.10% of the whole amount for bridges over 1,000 USDC</B>. The platform fee is added to the amount you send, so the
             recipient receives the amount you entered, less Circle&rsquo;s fees.
           </P>
           <P>

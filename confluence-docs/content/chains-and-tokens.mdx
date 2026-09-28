@@ -1,0 +1,47 @@
+---
+title: Chains and tokens
+description: Which chains and tokens you can use, and why the lists are always live.
+---
+
+import { Callout } from "nextra/components";
+
+# Chains and tokens
+
+Confluence doesn't keep a fixed list of chains and tokens that could go out of date. The app builds its lists **live** from the services that actually move your funds, so what you see in the app is always what works today.
+
+## Bridge (CCTP)
+
+The chains on the Bridge page come from Circle's own list of chains that support CCTP. On top of that, Confluence only offers chains where:
+
+- **Circle's Forwarding Service is supported**, so every bridge can be delivered for you automatically, and
+- **the chain is switched on** in Confluence. We can pause a chain for maintenance or while we test it, without touching the others.
+
+The token is always **native USDC**, burned on one chain and minted on the other.
+
+## Swap
+
+The Swap page lists the chains and tokens that Circle's App Kit supports for swapping, such as USDC, EURC, USDT and each chain's native token where available.
+
+## Relay routes
+
+Relay routes use Relay's own live list:
+
+- **Chains:** every EVM chain that Relay currently accepts deposits on. Chains Relay has paused are hidden automatically.
+- **Tokens:** Relay's curated list for each chain, with search. You can also paste a token's contract address to find it.
+
+<Callout type="info">
+  Pasting a contract address can find tokens that aren't in the curated list. Only use addresses you've verified from the token's official
+  source, since anyone can create a token with a familiar name.
+</Callout>
+
+## Seeing the current lists
+
+The simplest way to see what's supported right now is to open the chain and token pickers in the app:
+
+- [Bridge](https://app.confluencebuild.xyz) for CCTP chains,
+- [Swap](https://app.confluencebuild.xyz/swap) for App Kit swaps,
+- and the **Relay** switch on either page for Relay's chains and tokens.
+
+## Networks in your wallet
+
+When you pick a chain, the app asks your wallet to switch to it. If your wallet doesn't know the network yet, it will offer to add it using the network details the app provides. Approve it and carry on.
