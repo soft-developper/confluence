@@ -6,6 +6,7 @@ import { fetchFooter, type FooterContent } from "@/lib/api";
 import { publicEnv } from "@/lib/env";
 import { useBridgeChains } from "@/components/Providers";
 import { Mark } from "@/components/BrandMarks";
+import { DOCS_URL } from "@/components/NavTabs";
 
 /**
  * Site footer. Editable content (built by, privacy, terms, copyright, socials, network
@@ -103,12 +104,14 @@ export function SiteFooter() {
             <Link href="/profile" className="hover:text-ink hover:underline">
               Profile
             </Link>
+            <ExternalLink href={DOCS_URL}>Docs</ExternalLink>
           </nav>
 
           <div className="flex flex-col gap-2 text-sm text-ink-muted">
             <span className="text-xs font-medium tracking-wide uppercase">Built on</span>
             <ExternalLink href="https://developers.circle.com/cctp">Circle CCTP</ExternalLink>
             <ExternalLink href="https://www.arc.io">Arc</ExternalLink>
+            <ExternalLink href="https://relay.link">Relay</ExternalLink>
             {f?.socials.map((s) => (
               <ExternalLink key={s.url} href={s.url}>
                 {s.label}

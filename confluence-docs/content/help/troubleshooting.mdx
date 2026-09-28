@@ -1,0 +1,51 @@
+---
+title: Troubleshooting
+description: Fixes for the most common problems when bridging, swapping or using Relay.
+---
+
+import { Callout } from "nextra/components";
+
+# Troubleshooting
+
+## Wallet and network
+
+**My wallet won't connect.** Refresh the page, make sure your wallet extension is unlocked, and try again. On mobile, use WalletConnect from the connect window. If your wallet shows a pending request, approve or reject it first.
+
+**My wallet is on the wrong network.** Confluence asks your wallet to switch when you pick a chain. If nothing happens, switch manually in your wallet, or approve the "add network" request if your wallet doesn't know the chain yet.
+
+**The transaction fails straight away, or the app warns about gas.** Your wallet needs a little of the source chain's gas token for the approval and the burn (CCTP never pays source gas). On Arc, gas is paid in USDC. Add a small amount and try again.
+
+## Bridges
+
+**It says "Not sent".** The transfer stopped before the burn, usually because a wallet request was declined or failed. No USDC left your wallet. Start a new bridge when you're ready.
+
+**It's been "Awaiting attestation" for a while.** Standard transfers wait for the source chain to finalize, and on some chains that takes a long time. Check the expected time shown for your chain. If you're in a hurry next time, choose **Fast** where it's offered.
+
+**Forwarding hasn't delivered my USDC.** If the USDC hasn't arrived 30 minutes after attestation, the transaction page shows **Complete mint**. Switch your wallet to the destination chain (you'll need a little of its gas token) and complete it yourself. Only one mint can succeed, so there's no risk of paying twice.
+
+**Complete mint failed.** Check you have gas on the destination chain and that your wallet is on that chain. If Circle's attestation had expired, **Complete mint** fetches a fresh one first; just try again.
+
+**I can't find my transfer.** Your transfers are listed in your Profile once you [sign in](/getting-started/sign-in) with the same wallet you sent from. Each bridge also keeps its own transaction page, so a saved link always works.
+
+## Relay routes
+
+**"This quote could not be verified."** Confluence checks every Relay quote against Relay's published contracts, and this one didn't pass, so it wasn't shown to your wallet. Try again in a moment. If it keeps happening for the same route, contact us with the tokens and chains you chose.
+
+**"Too many quote requests right now."** Wait a few seconds, then try again.
+
+**"Below Relay's minimum" or "no route".** Some routes need a larger amount, and some token pairs have no route at the moment. Try a larger amount, another token, or another chain.
+
+**My Relay route shows "Refunded".** Relay couldn't complete the route and returned your funds on the chain you sent from. Check your wallet there.
+
+**The token I want isn't listed.** Paste its contract address into the token search. Only use an address you've verified from the token's official source.
+
+## Payments and IDs
+
+**"Unknown Confluence ID".** The ID doesn't exist. Check the spelling with the person you're paying; IDs use lowercase letters, numbers and underscores.
+
+## Still stuck?
+
+<Callout type="info">
+  Email **support@confluencebuild.xyz** with a short description and, for a bridge, the link to its transaction page (or your wallet address
+  and the transaction hash). Never share your seed phrase or private key: we will never ask for them.
+</Callout>

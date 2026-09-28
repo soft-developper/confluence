@@ -1,0 +1,46 @@
+---
+title: Glossary
+description: Plain-language definitions of the terms used across Confluence.
+---
+
+# Glossary
+
+**Address poisoning:** a scam where someone sends you a tiny transfer from an address that looks like one you use, hoping you'll copy it from your history later. Confluence warns you when a recipient looks similar to one you know.
+
+**Approval:** permission you give, in your wallet, for a contract to move a specific token for you. Needed before a burn, and before swapping some tokens.
+
+**Attestation:** Circle's signed proof that a burn happened on the source chain. The destination chain needs it to mint the USDC.
+
+**Basis points (bps):** hundredths of a percent. 10 bps is 0.10%.
+
+**Burn and mint:** how CCTP moves USDC. It's destroyed (burned) on the source chain and created (minted) on the destination chain, so no wrapped copies exist.
+
+**CCTP:** Circle's Cross-Chain Transfer Protocol, which moves native USDC between chains using burn and mint.
+
+**Confluence ID:** a permanent, public name like `@alice` that points to a wallet, so people can pay you by name.
+
+**Explorer:** a website that shows a blockchain's transactions. Confluence links to the right explorer for each chain.
+
+**Fast Transfer:** Circle's option to get an attestation before the source chain fully finalizes, for a small fee.
+
+**Finality:** the point at which a blockchain transaction can no longer be reversed. Standard CCTP transfers wait for it.
+
+**Forwarding Service:** Circle's service that submits the destination mint for you, so bridged USDC arrives automatically.
+
+**Gas:** the network fee paid to process a transaction, in the chain's own token (USDC on Arc).
+
+**Multisig:** a wallet that needs more than one key to move funds. Confluence's fees go to a 2-of-3 multisig.
+
+**Native USDC:** USDC issued directly by Circle on a chain, as opposed to a wrapped or bridged copy.
+
+**Quote:** the price, fees and expected result shown before you confirm. Quotes refresh because prices and fees change.
+
+**Relay:** a cross-chain network whose solvers deliver bridges and swaps across many chains and tokens. Used by Relay routes.
+
+**Refund:** when Relay can't complete a route, it may return your funds on the chain you sent from.
+
+**Sign-In with Ethereum:** a standard way to prove you own a wallet by signing a message. Free, and not a transaction.
+
+**Slippage:** how much a price may move between the quote and your swap. If it moves more, the swap doesn't go through.
+
+**Solver:** a participant in Relay's network that fills your route by delivering tokens on the destination.

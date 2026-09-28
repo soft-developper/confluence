@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+export const DOCS_URL = "https://docs.confluencebuild.xyz";
+
 const TABS = [
   { href: "/", label: "Bridge" },
   { href: "/swap", label: "Swap" },
@@ -26,6 +28,15 @@ export function NavTabs() {
           </Link>
         );
       })}
+      {/* Docs live on their own site (docs.confluencebuild.xyz); opens in a new tab so the app stays open. */}
+      <a
+        href={DOCS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted hover:text-ink"
+      >
+        Docs
+      </a>
     </nav>
   );
 }

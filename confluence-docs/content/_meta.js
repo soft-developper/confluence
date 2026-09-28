@@ -1,4 +1,4 @@
-// Sidebar order (https://nextra.site/docs/file-conventions/meta-file). Help and legal arrive in D5.
+// Sidebar order (https://nextra.site/docs/file-conventions/meta-file).
 export default {
   index: "Introduction",
   "getting-started": "Getting started",
@@ -8,4 +8,7 @@ export default {
   "how-it-works": "How Confluence works",
   safety: "How we keep you safe",
   reliability: "Speed and reliability",
+  help: "Help",
+  legal: "Legal",
+  changelog: "Changelog",
 };

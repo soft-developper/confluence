@@ -1,0 +1,54 @@
+---
+title: FAQ
+description: Quick answers to common questions about Confluence.
+---
+
+# FAQ
+
+### Does Confluence hold my funds?
+
+No. Confluence is non-custodial: you sign every transaction in your own wallet, and funds move directly between your wallet and Circle's or Relay's contracts. We never have your keys.
+
+### Is the USDC I receive wrapped?
+
+Not with Confluence's CCTP bridge. Circle's CCTP burns USDC on one chain and mints native USDC on the other, so you always receive the same USDC Circle issues on that chain.
+
+### Do I need an account?
+
+No. You can bridge, swap and use Relay routes with just a wallet. Signing in with your wallet only unlocks your Profile: history, a synced address book, and your Confluence ID.
+
+### Which chains and tokens are supported?
+
+The lists are live in the app, built from Circle's and Relay's own data. See [Chains and tokens](/chains-and-tokens).
+
+### How much does it cost?
+
+For CCTP bridges, 0.30 USDC up to 1,000 USDC, and 0.10% of the whole amount above that, plus any Circle and network costs shown on the quote. See [Fees](/fees) for swaps, Relay routes and examples.
+
+### Why does my wallet ask me to sign twice?
+
+For a bridge, the first request approves the USDC and the second burns it. For swaps and Relay routes, a first-time approval may come before the transfer itself.
+
+### Can I cancel a transfer?
+
+Before you confirm in your wallet, yes: just don't sign. Once USDC is burned on the source chain, a CCTP transfer can't be cancelled; it will always complete to the recipient you chose.
+
+### What happens if Confluence goes offline?
+
+Your funds are on the blockchain, not with us. A burned CCTP transfer can still be completed with Circle's attestation, and Relay routes are delivered by Relay's own network.
+
+### Should I use Confluence or Relay?
+
+Use **Confluence** to move USDC between the chains the Bridge page lists, with native USDC minted on arrival. Use **Relay** for chains and tokens beyond that, or to bridge and swap in one step.
+
+### Can I change my Confluence ID?
+
+No. IDs are permanent once claimed and can't be changed or transferred, so choose carefully.
+
+### Who receives Confluence's fees?
+
+A 2-of-3 multisig wallet, which needs two separate keys to move funds.
+
+### How do I report a security issue?
+
+Email **support@confluencebuild.xyz** with the details. See [How we keep you safe](/safety#report-a-vulnerability).
