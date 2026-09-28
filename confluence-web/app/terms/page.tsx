@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "The terms that apply when you use Confluence.",
 };
 
-const EFFECTIVE_DATE = "27 September 2026";
+const EFFECTIVE_DATE = "28 September 2026";
 const OPERATOR = "Softdeveloper";
 const CONTACT_EMAIL = "support@confluencebuild.xyz";
 
@@ -59,7 +59,9 @@ export default function TermsPage() {
           <P>
             Confluence is an interface for moving USDC between blockchains and swapping tokens. Bridging runs on
             Circle&rsquo;s Cross-Chain Transfer Protocol (CCTP), which burns USDC on the source chain and mints it on the
-            destination chain. Swaps run through Circle&rsquo;s App Kit.
+            destination chain. Swaps run through Circle&rsquo;s App Kit. Confluence also offers <B>Relay routes</B>: when
+            you choose Relay on the Bridge or Swap page, your bridge or swap is quoted, executed and delivered by Relay
+            (relay.link) and its solvers instead of CCTP, across the chains and tokens Relay supports.
           </P>
           <div className="border-l-2 border-destination pl-5">
             <p className="text-[15px] leading-7 text-ink">
@@ -102,13 +104,19 @@ export default function TermsPage() {
             own fee and a slippage limit, both shown before you confirm.
           </P>
           <P>
+            <B>Relay routes</B> carry a Confluence app fee in basis points of the input value, shown on the quote (0.10% by
+            default; we may change it, and the rate on your quote is the one that applies). Relay also charges its own
+            costs, shown on the quote as execution cost, swap cost and Relay platform fee. If Relay can&rsquo;t complete a
+            route, it may refund you on the source chain instead.
+          </P>
+          <P>
             Every fee is shown on the quote before you sign. Circle&rsquo;s fees on a quote are estimates and can change
             slightly by the time the transfer settles. A quote is valid for 60 seconds; after that you&rsquo;ll need a new
             one.
           </P>
         </Section>
 
-        <Section title="Forwarding and completing transfers">
+        <Section title="Forwarding and completing transfers (CCTP)">
           <P>
             With Forwarding on, Circle&rsquo;s Forwarding Service mints your USDC on the destination chain for you. If you
             turn Forwarding off, or if forwarding stalls, you complete the transfer yourself from the transaction page
@@ -138,7 +146,9 @@ export default function TermsPage() {
         <Section title="Services we don't control">
           <P>
             Confluence depends on services we don&rsquo;t operate, including Circle (CCTP, attestations, Forwarding and
-            App Kit), public blockchains and their RPC providers, and the wallet you connect. Delays, outages, fee changes
+            App Kit), Relay and its solvers for Relay routes, public blockchains and their RPC providers, and the wallet you
+            connect. Before you sign a Relay route, Confluence checks the quote against Relay&rsquo;s published contracts,
+            but the delivery itself is performed by Relay. Delays, outages, fee changes
             or failures in these services are outside our control, and we&rsquo;re not responsible for them.
           </P>
         </Section>
@@ -170,7 +180,7 @@ export default function TermsPage() {
           <P>
             To the fullest extent allowed by law, we aren&rsquo;t liable for any loss arising from your use of
             Confluence, including losses from mistakes in addresses or chains, blockchain or smart contract failures,
-            actions or failures of Circle or other third parties, delays, or unauthorized access to your wallet. Where
+            actions or failures of Circle, Relay or other third parties, delays, or unauthorized access to your wallet. Where
             liability can&rsquo;t be excluded, it is limited to the platform fees you paid us for the transaction in
             question.
           </P>

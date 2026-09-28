@@ -1,0 +1,24 @@
+/* Confluence brand fonts on top of the Nextra docs theme. */
+body,
+.nextra-content,
+input,
+button {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+}
+code,
+kbd,
+pre {
+  font-family: "Geist Mono", ui-monospace, monospace;
+}
+.confluence-open-app {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: #5d5aef;
+  color: #fff !important;
+  white-space: nowrap;
+}
+.confluence-open-app:hover {
+  background: #4b48d9;
+}

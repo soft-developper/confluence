@@ -1,0 +1,55 @@
+---
+title: Your first bridge
+description: Move USDC from one chain to another with Confluence.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Your first bridge
+
+Bridging moves your USDC from one chain to another using Circle's Cross-Chain Transfer Protocol (CCTP). Your USDC is burned where you send it from and minted as native USDC where it arrives.
+
+<Steps>
+
+### Choose where from and where to
+
+On the **Bridge** page, pick the chain you're sending from and the chain you're sending to. The arrow between them swaps the direction.
+
+### Enter the amount
+
+Type how much USDC you want to send. Your balance on the sending chain is shown so you can check you have enough.
+
+### Pick a speed, if offered
+
+- **Standard** is free. How long it takes depends on the sending chain and is shown in the app.
+- **Fast** arrives much sooner for a small CCTP fee. It's offered on chains where it makes a real difference.
+
+### Choose how it arrives
+
+With **Forwarding** on, Circle delivers the USDC to you on the destination chain automatically, for a small forwarding fee. With it off, you complete the last step yourself from the transaction page, which needs a little gas on the destination chain.
+
+### Review the details
+
+Click **Review bridge**. You'll see the bridge amount, the platform fee, the total taken from your wallet, the CCTP and forwarding fees, and the USDC you can expect to receive.
+
+### Confirm in your wallet
+
+Your wallet asks you to approve USDC for the transfer, then to confirm the bridge itself. That's two prompts, and both are needed.
+
+### Track it
+
+You're taken to the transaction page, which follows your transfer until the USDC arrives. You can close it and come back later: your transfers are also listed in your Profile once you sign in.
+
+</Steps>
+
+<Callout type="info">
+  **Sending to someone else?** Turn on **Send to another address** and paste their address, or type their Confluence ID, like `@alice`.
+</Callout>
+
+## If a transfer seems slow
+
+Standard transfers wait for the sending chain to finalize, which can take a while on some chains. If Forwarding hasn't delivered your USDC 30 minutes after Circle's attestation, the transaction page offers to let you complete it yourself, so your funds are never stuck waiting.
+
+<Callout type="warning">
+  Double-check the destination chain and any recipient address before confirming. Once USDC is burned on the sending chain, the transfer can't be cancelled.
+</Callout>

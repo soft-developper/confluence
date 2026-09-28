@@ -1,0 +1,48 @@
+---
+title: Using Relay
+description: Bridge and swap across more chains and tokens with Relay routes.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Using Relay
+
+Relay routes let you bridge and swap across many more chains and tokens than CCTP covers, from the same Bridge and Swap pages. They're powered by [Relay](https://relay.link), whose network of solvers delivers your tokens on the other side.
+
+<Steps>
+
+### Switch to Relay
+
+At the top of the **Bridge** or **Swap** page, switch from **Confluence** to **Relay**. Confluence is always selected when you first open the page.
+
+### Choose what you pay and what you receive
+
+Tap a token to open the picker: chains on one side, that chain's tokens on the other, with search. You can also paste a token's contract address.
+
+- Pick a token on the **same chain** to **swap**.
+- Pick a token on **another chain** to **bridge**.
+
+The title changes to match, automatically.
+
+### Enter the amount and check the quote
+
+The quote shows what you'll receive, the minimum you'll receive, the estimated time, and a full fee breakdown: execution cost, swap cost, Relay's platform fee, and the Confluence fee.
+
+### Review and confirm
+
+Click **Review**, then **Confirm**. Your wallet may ask to switch networks (or add a network it doesn't know yet), approve the token, and confirm the transfer.
+
+### Watch it complete
+
+Each step is shown as it happens, with links to the transaction on the chain's explorer. Keep the page open until it finishes.
+
+</Steps>
+
+<Callout type="info">
+  Before your wallet is ever asked to sign, Confluence checks every Relay quote against Relay's own published contracts. A quote that doesn't
+  match is never shown to you.
+</Callout>
+
+<Callout type="warning">
+  If Relay can't complete a route, it may refund you on the chain you sent from instead. The app tells you when this happens.
+</Callout>

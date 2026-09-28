@@ -1,0 +1,44 @@
+---
+title: Introduction
+description: Confluence moves USDC between blockchains and swaps tokens, without ever holding your funds.
+---
+
+import { Callout, Cards } from "nextra/components";
+
+# Welcome to Confluence
+
+Confluence is a simple way to **move USDC between blockchains** and **swap tokens**, centered on Arc, Circle's blockchain. You connect your own wallet, choose where your money should go, and sign each step yourself.
+
+<Callout type="info">
+  **Confluence never holds your funds.** Every transfer is signed by you, in your own wallet, and moves directly between you and the underlying
+  protocols. We never see your private keys and can't move your money for you.
+</Callout>
+
+## What you can do
+
+- **Bridge USDC** between supported chains using Circle's Cross-Chain Transfer Protocol (CCTP). Your USDC is burned on the chain you send from and freshly minted on the chain you send to, so it's always native USDC, never a wrapped copy.
+- **Swap tokens** on the same chain, through Circle's App Kit.
+- **Use Relay routes** for bridges and swaps across the wider set of chains and tokens that [Relay](https://relay.link) supports, from the same Bridge and Swap pages.
+- **Pay people by name.** Claim a Confluence ID like `@yourname` and anyone can send you USDC without copying a long address.
+- **Keep track of everything** in your Profile: your history, your saved recipients, and your Confluence ID.
+
+## Where to start
+
+<Cards>
+  <Cards.Card title="Connect your wallet" href="/getting-started/connect-wallet" />
+  <Cards.Card title="Your first bridge" href="/getting-started/first-bridge" />
+  <Cards.Card title="Your first swap" href="/getting-started/first-swap" />
+  <Cards.Card title="Using Relay" href="/getting-started/relay" />
+</Cards>
+
+## What you need
+
+- A crypto wallet, such as a browser wallet extension or a mobile wallet that supports WalletConnect.
+- The USDC (or token) you want to move, on the chain you're sending from.
+- A little of that chain's gas token to pay network fees. On Arc, gas is paid in USDC.
+
+<Callout type="warning">
+  Transactions on a blockchain are final. Always check the destination chain and recipient before you confirm.
+</Callout>
+
+Ready? Open the app at [app.confluencebuild.xyz](https://app.confluencebuild.xyz), or start with [connecting your wallet](/getting-started/connect-wallet).

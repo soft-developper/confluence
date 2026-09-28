@@ -1,0 +1,36 @@
+---
+title: Pay someone by @ID
+description: Send USDC to a Confluence ID instead of a long address.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Pay someone by @ID
+
+If someone has a Confluence ID, you can send them USDC using their name instead of their wallet address.
+
+<Steps>
+
+### Start a bridge
+
+On the **Bridge** page, choose the chains and enter the amount, as in [your first bridge](/getting-started/first-bridge).
+
+### Turn on Send to another address
+
+In the recipient field, type their ID with the `@` in front, for example `@alice`.
+
+### Check it resolves
+
+Confluence looks up the ID and shows the wallet it belongs to. If the ID doesn't exist, you'll see **Unknown Confluence ID** and can't continue.
+
+### Review and confirm
+
+The review screen shows `@alice` as the recipient. Confirm in your wallet as usual.
+
+</Steps>
+
+The USDC arrives in their wallet on the destination chain you chose, and the payment shows up in both of your histories.
+
+<Callout type="info">
+  Make sure you have the right ID before confirming. Like any blockchain transfer, a payment to the wrong person can't be reversed.
+</Callout>

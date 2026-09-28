@@ -10,10 +10,10 @@ import { publicEnv } from "./env";
 export const RELAY_BASE = `${publicEnv.apiUrl}/relay`;
 
 /**
- * Execution (signing and sending) arrives in R3. Until then the Relay toggle only appears
- * with ?relay=preview in the URL, so users never meet a panel they can't finish.
+ * R5: Relay is public. The Confluence | Relay toggle shows for everyone whenever Relay is
+ * switched on in admin (setting this back to false would hide it behind ?relay=preview).
  */
-export const RELAY_EXECUTION_READY = false;
+export const RELAY_EXECUTION_READY = true;
 
 /** Relay's placeholder "user" for quotes before a wallet connects (as its SDK does). */
 export const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD";
