@@ -7,6 +7,8 @@ import { startIdempotencySweeper } from "./middleware/idempotency.js";
 import { IRIS_BASE_URL, IrisClient, IrisMessagesClient } from "./circle/iris.js";
 import { startTracker } from "./tracker/tracker.js";
 import { startHousekeeping } from "./housekeeping/pruneFailed.js";
+import { relayUpstreamFor } from "./relay/upstream.js";
+import { startRelayReconciler } from "./relay/status.js";
 import { TokenBucket } from "./lib/tokenBucket.js";
 
 function configOrExit(): Config {
@@ -58,6 +60,13 @@ if (config.TRACKER_ENABLED) {
   console.log("tracker: off (TRACKER_ENABLED=false)");
 }
 
-createApp(config, db, registry, iris).listen(config.PORT, () => {
+// Relay (R3b): one shared client, so the app and the backup status check share one rate budget.
+const relayUpstream = relayUpstreamFor(config);
+if (relayUpstream.configured) {
+  startRelayReconciler(db, relayUpstream);
+  console.log("relay: backup status check on, every 2 min");
+}
+
+createApp(config, db, registry, iris, undefined, relayUpstream).listen(config.PORT, () => {
   console.log(`confluence-api [${config.CONFLUENCE_ENV}] listening on :${config.PORT}`);
 });

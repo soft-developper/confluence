@@ -23,6 +23,7 @@ import { SYNC_EVENT } from "@/components/SessionSync";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useSignIn } from "@/hooks/useSignIn";
 import { Pager } from "@/components/Pager";
+import { fetchRelayChains, type RelayChain } from "@/lib/relay";
 
 const ID_RULE = /^[a-z0-9_]{3,20}$/;
 
@@ -257,12 +258,24 @@ function SyncCard({ address }: { address: `0x${string}` }) {
   );
 }
 
+/** Trims long token amounts (Relay tokens can have 18 decimals) for the history list. */
+function fmtAmount(v: string): string {
+  const [w = "0", f = ""] = v.split(".");
+  const t = f.slice(0, 6).replace(/0+$/, "");
+  return t ? `${w}.${t}` : w;
+}
+
 const STATE_LABEL: Record<string, string> = {
   COMPLETED: "Complete",
   FAILED: "Failed",
   RECOVERY_REQUIRED: "Needs attention",
   CREATED: "Not sent",
   SUBMITTED: "In progress",
+  // Relay requests (R3b)
+  WAITING: "Waiting",
+  DEPOSITING: "In progress",
+  PENDING: "In progress",
+  REFUNDED: "Refunded",
 };
 
 function HistoryCard({ token, address }: { token: string; address: string }) {
@@ -283,6 +296,9 @@ function HistoryCard({ token, address }: { token: string; address: string }) {
     retry: false,
   });
   const items = q.data?.items ?? [];
+  // Relay items link to explorers from Relay's own chain list (only loaded when needed).
+  const hasRelay = items.some((i) => i.kind === "relay");
+  const relayChains = useQuery({ queryKey: ["relay-chains"], queryFn: ({ signal }) => fetchRelayChains(signal), staleTime: 60 * 60_000, enabled: hasRelay, retry: 1 });
 
   return (
     <Card title="History">
@@ -293,7 +309,7 @@ function HistoryCard({ token, address }: { token: string; address: string }) {
       )}
       <ul className={`flex flex-col ${q.isFetching && q.isPlaceholderData ? "opacity-60" : ""}`}>
         {items.map((it) => (
-          <HistoryRow key={`${it.kind}-${it.id}`} it={it} nameOf={nameOf} chains={chains} />
+          <HistoryRow key={`${it.kind}-${it.id}`} it={it} nameOf={nameOf} chains={chains} relayChains={relayChains.data ?? []} />
         ))}
       </ul>
       {q.data && <Pager page={q.data.page} totalPages={q.data.totalPages} total={q.data.total} pageSize={q.data.pageSize} onPage={setPage} busy={q.isFetching} />}
@@ -305,13 +321,22 @@ function HistoryRow({
   it,
   nameOf,
   chains,
+  relayChains,
 }: {
   it: HistoryItem;
   nameOf: (id: string | null) => string;
   chains: ReturnType<typeof useBridgeChains>["chains"];
+  relayChains: readonly RelayChain[];
 }) {
   const label = STATE_LABEL[it.state] ?? it.state.replace(/_/g, " ").toLowerCase();
-  const tone = it.state === "COMPLETED" ? "text-destination-text" : it.state === "FAILED" || it.state === "CREATED" ? "text-ink-muted" : it.state === "RECOVERY_REQUIRED" ? "text-warning" : "text-action-text";
+  const tone =
+    it.state === "COMPLETED"
+      ? "text-destination-text"
+      : it.state === "FAILED" || it.state === "CREATED"
+        ? "text-ink-muted"
+        : it.state === "RECOVERY_REQUIRED" || it.state === "REFUNDED"
+          ? "text-warning"
+          : "text-action-text";
   const when = new Date(it.createdAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
   const route = it.destinationChain && it.destinationChain !== it.sourceChain ? `${nameOf(it.sourceChain)} → ${nameOf(it.destinationChain)}` : nameOf(it.sourceChain);
   // Stage 8a: incoming payments and payments to a Confluence ID.
@@ -321,9 +346,18 @@ function HistoryRow({
       ? it.direction === "in"
         ? `Received ${it.amountIn} USDC${who ? ` from ${who}` : ""}`
         : `Bridge ${it.amountIn} USDC${who ? ` to ${who}` : ""}`
-      : `Swap ${it.amountIn} ${it.tokenIn} → ${it.amountOut ? `${it.amountOut} ` : ""}${it.tokenOut}`;
+      : it.kind === "relay"
+        ? `${it.destinationChain !== it.sourceChain ? "Bridge" : "Swap"} ${fmtAmount(it.amountIn)} ${it.tokenIn} → ${it.amountOut ? `${fmtAmount(it.amountOut)} ` : ""}${it.tokenOut} via Relay`
+        : `Swap ${it.amountIn} ${it.tokenIn} → ${it.amountOut ? `${it.amountOut} ` : ""}${it.tokenOut}`;
   const src = chains.find((c) => c.id === it.sourceChain);
-  const href = it.kind === "bridge" ? `/tx/${it.id}` : it.txHash && src ? src.explorerTxUrl.replace("{hash}", it.txHash) : undefined;
+  let href: string | undefined;
+  if (it.kind === "bridge") href = `/tx/${it.id}`;
+  else if (it.kind === "relay") {
+    // Delivery tx once Relay reports it, else the deposit, on that chain's explorer.
+    const onDest = it.state === "COMPLETED" && it.destinationChainId !== undefined;
+    const rc = relayChains.find((c) => c.id === (onDest ? it.destinationChainId : it.originChainId));
+    href = it.txHash && rc?.explorerUrl ? `${rc.explorerUrl.replace(/\/$/, "")}/tx/${it.txHash}` : undefined;
+  } else href = it.txHash && src ? src.explorerTxUrl.replace("{hash}", it.txHash) : undefined;
   const inner = (
     <div className="flex items-center justify-between gap-3 py-3">
       <div className="flex min-w-0 flex-col">

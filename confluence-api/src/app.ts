@@ -14,7 +14,7 @@ import { siteRouter } from "./routes/site.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminDataRouter } from "./routes/adminData.js";
 import { relayRouter } from "./routes/relay.js";
-import { MAINNET_RELAY_API, RelayUpstream, TESTNET_RELAY_API } from "./relay/upstream.js";
+import { relayUpstreamFor, type RelayUpstream } from "./relay/upstream.js";
 import { maintenanceGuard } from "./site/maintenance.js";
 import { createEmailSender } from "./email/resend.js";
 import { buildSwapRegistry, type SwapRegistry } from "./swaps/tokens.js";
@@ -27,10 +27,7 @@ export function createApp(
   registry: ChainRegistry,
   iris: IrisClient,
   swapRegistry: SwapRegistry = buildSwapRegistry(config),
-  relayUpstream: RelayUpstream = new RelayUpstream({
-    baseUrl: config.RELAY_API_URL ?? (config.CONFLUENCE_ENV === "mainnet" ? MAINNET_RELAY_API : TESTNET_RELAY_API),
-    apiKey: config.RELAY_API_KEY,
-  }),
+  relayUpstream: RelayUpstream = relayUpstreamFor(config),
 ) {
   const app = express();
   app.disable("x-powered-by");
@@ -63,7 +60,15 @@ export function createApp(
   );
 
   app.use(ipRateLimit());
-  app.use(express.json({ limit: "100kb" }));
+  app.use(
+    express.json({
+      limit: "100kb",
+      // Relay signs the exact webhook bytes (R3b), so keep them for that one route.
+      verify: (req, _res, buf) => {
+        if ((req as { url?: string }).url === "/relay-webhook") (req as unknown as { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      },
+    }),
+  );
   app.use(maintenanceGuard(db));
   app.use(healthRouter(config, db));
   app.use(chainsRouter(config, registry, db));
@@ -74,7 +79,7 @@ export function createApp(
   app.use(accountRouter(db, config, registry));
   app.use(siteRouter(db));
   // Relay attribution uses our web domain (https://docs.relay.link/references/relay-kit/sdk/createClient).
-  app.use(relayRouter(db, registry, relayUpstream, new URL(config.ADMIN_WEB_ORIGIN ?? config.CORS_ORIGINS[0]!).hostname));
+  app.use(relayRouter(db, registry, relayUpstream, new URL(config.ADMIN_WEB_ORIGIN ?? config.CORS_ORIGINS[0]!).hostname, config.RELAY_API_KEY));
   const adminDeps = {
     db,
     secretKey: config.ADMIN_SECRET_KEY,

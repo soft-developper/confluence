@@ -203,6 +203,8 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
               amountIn: request.amount,
               amountOutQuoted: p.details?.currencyOut?.amount ?? undefined,
               inTxHash: hash,
+              decimalsIn: from.decimals,
+              decimalsOut: to.decimals,
             });
           }
         },

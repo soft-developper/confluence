@@ -5,6 +5,8 @@ import type { Db } from "../db/client.js";
 import { ipRateLimit } from "../middleware/rateLimits.js";
 import { buildQuoteBody, findRoute, QuoteInput, relayChain, usableEvmChainIds } from "../relay/proxy.js";
 import { verifyQuote } from "../relay/verify.js";
+import { applyStatus } from "../relay/status.js";
+import { verifyRelayWebhook } from "../relay/webhook.js";
 import { relayRequests } from "../db/schema.js";
 import { appFeeRecipient, currentRelaySettings } from "../relay/settings.js";
 import { RelayBusyError, RelayNotConfiguredError, type RelayUpstream } from "../relay/upstream.js";
@@ -14,7 +16,7 @@ import { RelayBusyError, RelayNotConfiguredError, type RelayUpstream } from "../
  * /relay-settings tells the web app whether Relay is on and what our app fee is.
  * (confluence:relay-routes)
  */
-export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpstream, referrer: string) {
+export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpstream, referrer: string, webhookSecret?: string) {
   const router = Router();
 
   router.get("/relay-settings", async (_req, res, next) => {
@@ -107,6 +109,11 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
       const r = parsed.data;
       const settings = await currentRelaySettings(db);
       const now = new Date();
+      // Chain names from Relay's own (cached) list, not from the browser.
+      const nameOf = async (id: number) => {
+        const c = (await relayChain(upstream, id).catch(() => null)) as { displayName?: string; name?: string } | null;
+        return c?.displayName ?? c?.name ?? null;
+      };
       await db
         .insert(relayRequests)
         .values({
@@ -123,10 +130,33 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
           amountOutQuoted: r.amountOutQuoted ?? null,
           appFeeBps: settings.appFeeBps,
           inTxHash: r.inTxHash?.toLowerCase() ?? null,
+          originChainName: await nameOf(r.originChainId),
+          destinationChainName: await nameOf(r.destinationChainId),
+          decimalsIn: r.decimalsIn ?? null,
+          decimalsOut: r.decimalsOut ?? null,
           updatedAt: now,
         })
         .onConflictDoNothing({ target: relayRequests.requestId });
       res.status(201).json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // R3b: Relay's signed status webhook (configure it in the Relay Dashboard for our key).
+  router.post("/relay-webhook", async (req, res, next) => {
+    try {
+      const raw = (req as unknown as { rawBody?: Buffer }).rawBody;
+      if (!verifyRelayWebhook(raw, req.get("x-signature-timestamp"), req.get("x-signature-sha256"), webhookSecret)) {
+        res.status(401).json({ error: "invalid_signature" });
+        return;
+      }
+      const event = (req.body ?? {}) as { event?: string; data?: Record<string, unknown> };
+      const d = event.data ?? {};
+      if (event.event === "request.status.updated" && typeof d.requestId === "string" && typeof d.status === "string") {
+        await applyStatus(db, { requestId: d.requestId, status: d.status, inTxHashes: d.inTxHashes, txHashes: d.txHashes, failReason: d.failReason });
+      }
+      res.status(200).json({ ok: true });
     } catch (e) {
       next(e);
     }
@@ -158,5 +188,7 @@ const RegisterRequest = z
     amountIn: z.string().regex(/^[1-9][0-9]{0,77}$/),
     amountOutQuoted: z.string().regex(/^[0-9]{1,78}$/).optional(),
     inTxHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
+    decimalsIn: z.number().int().min(0).max(36).optional(),
+    decimalsOut: z.number().int().min(0).max(36).optional(),
   })
   .strict();

@@ -119,3 +119,11 @@ export class RelayUpstream {
     }
   }
 }
+
+/** The Relay client for this environment: mainnet or testnet API unless RELAY_API_URL overrides it. */
+export function relayUpstreamFor(config: { RELAY_API_URL?: string | undefined; RELAY_API_KEY?: string | undefined; CONFLUENCE_ENV: string }) {
+  return new RelayUpstream({
+    baseUrl: config.RELAY_API_URL ?? (config.CONFLUENCE_ENV === "mainnet" ? MAINNET_RELAY_API : TESTNET_RELAY_API),
+    apiKey: config.RELAY_API_KEY,
+  });
+}

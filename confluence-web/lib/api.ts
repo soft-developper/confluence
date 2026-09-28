@@ -381,7 +381,7 @@ export async function checkIdAvailability(handle: string) {
 }
 
 export const HistoryItemSchema = z.object({
-  kind: z.enum(["bridge", "swap"]),
+  kind: z.enum(["bridge", "swap", "relay"]),
   direction: z.enum(["out", "in"]).default("out"),
   counterparty: z.string().nullable().optional(),
   counterpartyId: z.string().nullable().optional(),
@@ -397,6 +397,9 @@ export const HistoryItemSchema = z.object({
   recipient: z.string(),
   txHash: z.string().nullable(),
   errorCode: z.string().nullable(),
+  /** Relay items (R3b): EVM chain ids for explorer links from Relay's chain list. */
+  originChainId: z.number().optional(),
+  destinationChainId: z.number().optional(),
 });
 export type HistoryItem = z.infer<typeof HistoryItemSchema>;
 

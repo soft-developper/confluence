@@ -371,6 +371,11 @@ export const relayRequests = sqliteTable(
     inTxHash: text("in_tx_hash"),
     outTxHash: text("out_tx_hash"),
     failReason: text("fail_reason"),
+    // R3b: display details for history (chain names from Relay's list, token decimals).
+    originChainName: text("origin_chain_name"),
+    destinationChainName: text("destination_chain_name"),
+    decimalsIn: integer("decimals_in"),
+    decimalsOut: integer("decimals_out"),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },

@@ -1,7 +1,7 @@
 import { and, count, eq, inArray, or, sql } from "drizzle-orm";
-import { getAddress, isAddress } from "viem";
+import { formatUnits, getAddress, isAddress } from "viem";
 import type { Db } from "../db/client.js";
-import { accounts, addressBookEntries, swaps, transfers } from "../db/schema.js";
+import { accounts, addressBookEntries, relayRequests, swaps, transfers } from "../db/schema.js";
 import { formatUsdc } from "../lib/usdc.js";
 
 export class AccountError extends Error {
@@ -91,7 +91,8 @@ export async function lookupId(db: Db, raw: string) {
 // ---------- history (own bridges and swaps) ----------
 
 export interface HistoryItem {
-  kind: "bridge" | "swap";
+  /** "relay": a Relay (relay.link) bridge or swap started from the Relay panel (R3b). */
+  kind: "bridge" | "swap" | "relay";
   /** Stage 8a: "in" = someone paid this wallet (it is the recipient, not the sender). */
   direction: "out" | "in";
   /** The other side: recipient for outgoing, sender for incoming (null for own-wallet moves). */
@@ -109,10 +110,16 @@ export interface HistoryItem {
   recipient: string;
   txHash: string | null;
   errorCode: string | null;
+  /** Relay items only: EVM chain ids, for explorer links from Relay's chain list. */
+  originChainId?: number;
+  destinationChainId?: number;
 }
 
 /** The signed-in wallet's bridges and swaps, newest first; `before` pages backwards. */
 export const HISTORY_PAGE_SIZE = 20;
+
+/** Relay statuses shown with the same words as Confluence's own history. */
+const RELAY_STATE: Record<string, string> = { success: "COMPLETED", failure: "FAILED", refund: "REFUNDED" };
 
 /**
  * The wallet's bridges (sent and received) and swaps, newest first, one numbered page at
@@ -127,18 +134,23 @@ export async function history(db: Db, address: string, opts: { page: number; pag
   const swapOwner = sql`lower(${swaps.sender}) = ${address}`;
   const [{ n: nT } = { n: 0 }] = await db.select({ n: count() }).from(transfers).where(owner);
   const [{ n: nS } = { n: 0 }] = await db.select({ n: count() }).from(swaps).where(swapOwner);
-  const total = Number(nT) + Number(nS);
+  const [{ n: nR } = { n: 0 }] = await db.select({ n: count() }).from(relayRequests).where(eq(relayRequests.userAddress, address));
+  const total = Number(nT) + Number(nS) + Number(nR);
   const pageRefs = (await db.all(
     sql`select 'bridge' as kind, id, created_at as at from transfers
           where lower(sender) = ${address} or lower(recipient) = ${address}
         union all
         select 'swap' as kind, id, created_at as at from swaps where lower(sender) = ${address}
+        union all
+        select 'relay' as kind, request_id as id, created_at as at from relay_requests where user_address = ${address}
         order by at desc, id desc limit ${lim} offset ${offset}`,
   )) as { kind: string; id: string }[];
   const tIds = pageRefs.filter((r) => r.kind === "bridge").map((r) => r.id);
   const sIds = pageRefs.filter((r) => r.kind === "swap").map((r) => r.id);
   const t = tIds.length ? await db.select().from(transfers).where(inArray(transfers.id, tIds)) : [];
   const s = sIds.length ? await db.select().from(swaps).where(inArray(swaps.id, sIds)) : [];
+  const rIds = pageRefs.filter((r) => r.kind === "relay").map((r) => r.id);
+  const rr = rIds.length ? await db.select().from(relayRequests).where(inArray(relayRequests.requestId, rIds)) : [];
   // Confluence IDs of people who paid this wallet.
   const payers = [...new Set(t.filter((x) => x.sender.toLowerCase() !== address).map((x) => x.sender.toLowerCase()))];
   const payerIds = new Map(
@@ -188,6 +200,27 @@ export async function history(db: Db, address: string, opts: { page: number; pag
       recipient: x.recipient,
       txHash: x.swapTxHash,
       errorCode: x.errorCode,
+    })),
+    ...rr.map((x) => ({
+      kind: "relay" as const,
+      direction: "out" as const,
+      counterparty: x.recipient === x.userAddress ? null : getAddress(x.recipient),
+      counterpartyId: null,
+      id: x.requestId,
+      state: RELAY_STATE[x.status] ?? x.status.toUpperCase(),
+      at: x.createdAt.getTime(),
+      createdAt: x.createdAt.toISOString(),
+      sourceChain: x.originChainName ?? String(x.originChainId),
+      destinationChain: x.destinationChainName ?? String(x.destinationChainId),
+      amountIn: x.decimalsIn === null ? x.amountIn : formatUnits(BigInt(x.amountIn), x.decimalsIn),
+      tokenIn: x.symbolIn,
+      tokenOut: x.symbolOut,
+      amountOut: x.amountOutQuoted === null || x.decimalsOut === null ? null : formatUnits(BigInt(x.amountOutQuoted), x.decimalsOut),
+      recipient: x.recipient,
+      txHash: x.outTxHash ?? x.inTxHash,
+      errorCode: x.failReason,
+      originChainId: x.originChainId,
+      destinationChainId: x.destinationChainId,
     })),
   ];
   items.sort((a, b) => b.at - a.at || b.id.localeCompare(a.id));

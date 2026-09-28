@@ -270,6 +270,8 @@ export interface RegisterRelayRequest {
   amountIn: string;
   amountOutQuoted?: string;
   inTxHash?: string;
+  decimalsIn?: number;
+  decimalsOut?: number;
 }
 
 /** Records a started Relay request for history and analytics. Best effort: never blocks the user. */
