@@ -1,9 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatUnits, parseUnits } from "viem";
 import { useConnection } from "wagmi";
+import type { ProgressData } from "@relayprotocol/relay-sdk";
+import { executeRelay, requestIdOf } from "@/lib/relayExec";
 import { ConnectModal } from "@/components/wallet/ConnectModal";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useRelayBalance } from "@/hooks/useRelayBalance";
@@ -13,11 +15,13 @@ import {
   fetchRelayChains,
   isNative,
   postRelayQuote,
-  RELAY_EXECUTION_READY,
+  registerRelayRequest,
+  relayExecErrorText,
   relayQuoteErrorText,
   sameToken,
   usdAbs,
   type RelayChain,
+  type RelayQuoteRequest,
   type RelayToken,
 } from "@/lib/relay";
 import { RelayTokenPicker } from "./RelayTokenPicker";
@@ -59,11 +63,15 @@ export function defaults(chains: RelayChain[], preset: "bridge" | "swap", wallet
  * through our proxy, which attaches Confluence's app fee. (confluence:relay-panel)
  */
 export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; appFeeBps: number }) {
-  const { address, chainId: walletChainId, status } = useConnection();
+  const { address, chainId: walletChainId, status, connector } = useConnection();
   const [connectOpen, setConnectOpen] = useState(false);
   const closeConnect = useCallback(() => setConnectOpen(false), []);
   const [picker, setPicker] = useState<"from" | "to" | null>(null);
   const closePicker = useCallback(() => setPicker(null), []);
+
+  const [view, setView] = useState<"form" | "review" | "run">("form");
+  const [run, setRun] = useState<{ phase: "running" | "success" | "refunded" | "error"; progress: ProgressData | null; error?: string } | null>(null);
+  const registered = useRef(false);
 
   const chainsQ = useQuery({ queryKey: ["relay-chains"], queryFn: ({ signal }) => fetchRelayChains(signal), staleTime: 60 * 60_000, retry: 2 });
   const chains = useMemo(() => chainsQ.data ?? [], [chainsQ.data]);
@@ -150,8 +158,181 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
   else if (quoteQ.isError) action = { label: "No quote", disabled: true };
   else if (status !== "connected") action = { label: "Connect wallet", onClick: () => setConnectOpen(true) };
   else if (!quote || stale) action = { label: "Getting quote...", disabled: true };
-  else if (!RELAY_EXECUTION_READY) action = { label: `Review ${mode} (coming in the next update)`, disabled: true };
-  else action = { label: `Review ${mode}`, disabled: true };
+  else action = { label: `Review ${mode}`, onClick: () => setView("review") };
+
+  const request: RelayQuoteRequest | null =
+    from && to && address && cleaned
+      ? {
+          user: address,
+          recipient: address,
+          originChainId: from.chainId,
+          destinationChainId: to.chainId,
+          originCurrency: from.address,
+          destinationCurrency: to.address,
+          amount: parseUnits(cleaned, from.decimals).toString(),
+          tradeType: "EXACT_INPUT",
+        }
+      : null;
+
+  async function start() {
+    if (!request || !connector || !address || !from || !to) return;
+    registered.current = false;
+    setView("run");
+    setRun({ phase: "running", progress: null });
+    try {
+      const data = await executeRelay({
+        request,
+        account: address,
+        getProvider: () => connector.getProvider(),
+        onProgress: (p) => {
+          setRun((r) => (r ? { ...r, progress: p } : r));
+          const hash = p.txHashes?.[0]?.txHash;
+          const requestId = requestIdOf(p);
+          if (!registered.current && hash && requestId) {
+            registered.current = true;
+            void registerRelayRequest({
+              requestId,
+              user: address,
+              recipient: address,
+              originChainId: from.chainId,
+              destinationChainId: to.chainId,
+              originCurrency: from.address,
+              destinationCurrency: to.address,
+              symbolIn: from.symbol,
+              symbolOut: to.symbol,
+              amountIn: request.amount,
+              amountOutQuoted: p.details?.currencyOut?.amount ?? undefined,
+              inTxHash: hash,
+            });
+          }
+        },
+      });
+      setRun((r) => ({ phase: data.refunded ? "refunded" : "success", progress: r?.progress ?? null }));
+      void balanceQ.refetch();
+    } catch (e) {
+      setRun((r) => ({ phase: "error", progress: r?.progress ?? null, error: relayExecErrorText(e) }));
+    }
+  }
+
+  function finish() {
+    const done = run?.phase === "success";
+    setRun(null);
+    setView("form");
+    if (done) setAmount("");
+  }
+
+  if ((view === "review" || view === "run") && from && to && fromChain && toChain && cleaned && address) {
+    const busy = run?.phase === "running";
+    const steps = run?.progress?.steps ?? [];
+    const hashes = run?.progress?.txHashes ?? [];
+    const title =
+      view === "review"
+        ? `Review ${mode}`
+        : run?.phase === "success"
+          ? `${mode === "bridge" ? "Bridge" : "Swap"} complete`
+          : run?.phase === "refunded"
+            ? "Refunded"
+            : run?.phase === "error"
+              ? `${mode === "bridge" ? "Bridge" : "Swap"} stopped`
+              : mode === "bridge"
+                ? "Bridging"
+                : "Swapping";
+    return (
+      <section className="flex w-full max-w-[460px] flex-col gap-5 rounded-lg border border-border bg-surface p-5 sm:p-6" aria-labelledby="relay-title">
+        {view === "review" && (
+          <button type="button" onClick={() => setView("form")} className="self-start text-sm text-ink-muted hover:text-ink">
+            ‹ Back
+          </button>
+        )}
+        <div className="flex items-center justify-between">
+          <h1 id="relay-title" className="text-[22px] font-medium">
+            {title}
+          </h1>
+          <span className="font-mono text-xs text-ink-muted">Powered by Relay</span>
+        </div>
+        <div className="flex flex-col gap-1 rounded-md border border-border bg-bg p-4">
+          <span className="text-xs text-ink-muted">You pay on {fromChain.name}</span>
+          <span className="tnum text-xl font-medium text-source-text">
+            {fmt(cleaned)} {from.symbol}
+          </span>
+          <span className="mt-2 text-xs text-ink-muted">You receive on {toChain.name} (estimated)</span>
+          <span className="tnum text-[28px] leading-9 font-medium text-destination-text">
+            {fmt(outFormatted)} {to.symbol}
+          </span>
+        </div>
+        <dl className="flex flex-col gap-2 text-sm">
+          {minOut && <Row label="Minimum received" value={`${fmt(minOut)} ${to.symbol}`} />}
+          {eta(quote?.timeEstimate) && <Row label="Estimated time" value={eta(quote?.timeEstimate)!} />}
+          <Row label={`Confluence fee (${appFeeBps / 100}%)`} value={appFeeBps > 0 ? (usdAbs(fees?.app?.usd ?? undefined) ?? "-") : "None"} />
+          <Row label="Sent to" value={`${address.slice(0, 6)}...${address.slice(-4)} (your wallet)`} />
+        </dl>
+
+        {view === "review" && (
+          <p className="rounded-md border border-border bg-bg p-3 text-[13px] text-ink-muted">
+            A fresh quote is fetched and checked when you confirm. Your wallet may ask to switch to {fromChain.name}, to approve {from.symbol}, then to
+            confirm the {mode}. Relay then delivers {to.symbol} on {toChain.name}.
+          </p>
+        )}
+
+        {view === "run" && steps.length > 0 && (
+          <ol className="flex flex-col text-[15px]" aria-live="polite">
+            {steps.map((st, i) => {
+              const done = st.items.length > 0 && st.items.every((it) => it.status === "complete");
+              const active = busy && !done && steps.slice(0, i).every((p) => p.items.every((it) => it.status === "complete"));
+              return (
+                <li
+                  key={`${st.id}-${i}`}
+                  className={`flex items-center gap-2.5 border-b border-border py-2.5 last:border-b-0 ${done || active ? "text-ink" : "text-ink-muted"}`}
+                >
+                  <span aria-hidden="true" className={done ? "text-destination-text" : active ? "animate-pulse text-action-text" : "text-border-control"}>
+                    {done ? "●" : "○"}
+                  </span>
+                  {st.description || st.action}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        {view === "run" && busy && steps.length === 0 && <p className="text-sm text-ink-muted">Getting a fresh, verified quote...</p>}
+
+        {run?.phase === "error" && run.error && (
+          <div role="alert" className="rounded-md border border-danger bg-bg p-3 text-[13px]">
+            {run.error}
+          </div>
+        )}
+        {run?.phase === "refunded" && (
+          <div role="status" className="rounded-md border border-warning bg-bg p-3 text-[13px]">
+            Relay couldn&rsquo;t complete this route and refunded you. Check your wallet on {fromChain.name}.
+          </div>
+        )}
+        {hashes.map((h) => {
+          const c = chains.find((x) => x.id === h.chainId);
+          return c?.explorerUrl ? (
+            <a
+              key={h.txHash}
+              href={`${c.explorerUrl.replace(/\/$/, "")}/tx/${h.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="self-start text-sm text-action-text"
+            >
+              View transaction on {c.name}
+            </a>
+          ) : null;
+        })}
+
+        {view === "review" ? (
+          <Primary onClick={() => void start()} disabled={!connector}>
+            Confirm {mode}
+          </Primary>
+        ) : busy ? (
+          <Primary disabled>{mode === "bridge" ? "Bridging..." : "Swapping..."}</Primary>
+        ) : (
+          <Primary onClick={finish}>{run?.phase === "success" ? `${mode === "bridge" ? "Bridge" : "Swap"} again` : "Back"}</Primary>
+        )}
+        {busy && <p className="text-center text-xs text-ink-muted">Keep this page open until it finishes.</p>}
+      </section>
+    );
+  }
 
   return (
     <section className="flex w-full max-w-[460px] flex-col gap-5 rounded-lg border border-border bg-surface p-5 sm:p-6" aria-labelledby="relay-title">
@@ -234,14 +415,9 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={action.onClick}
-        disabled={action.disabled}
-        className="h-13 w-full rounded-md bg-action text-[15px] font-medium text-on-action hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text"
-      >
+      <Primary onClick={action.onClick} disabled={action.disabled}>
         {action.label}
-      </button>
+      </Primary>
 
       <RelayTokenPicker
         open={picker !== null}
@@ -289,5 +465,18 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="text-ink-muted">{label}</dt>
       <dd className="tnum text-right font-mono text-[13px]">{value}</dd>
     </div>
+  );
+}
+
+function Primary({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="h-13 w-full rounded-md bg-action text-[15px] font-medium text-on-action hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text"
+    >
+      {children}
+    </button>
   );
 }

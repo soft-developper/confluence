@@ -254,3 +254,40 @@ export function usdAbs(v: string | undefined): string | null {
   if (!Number.isFinite(n)) return null;
   return n > 0 && n < 0.01 ? "< $0.01" : `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+// ---------- request registration (R3a) ----------
+
+export interface RegisterRelayRequest {
+  requestId: string;
+  user: string;
+  recipient: string;
+  originChainId: number;
+  destinationChainId: number;
+  originCurrency: string;
+  destinationCurrency: string;
+  symbolIn: string;
+  symbolOut: string;
+  amountIn: string;
+  amountOutQuoted?: string;
+  inTxHash?: string;
+}
+
+/** Records a started Relay request for history and analytics. Best effort: never blocks the user. */
+export async function registerRelayRequest(r: RegisterRelayRequest): Promise<void> {
+  try {
+    await fetch(`${publicEnv.apiUrl}/relay-requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) });
+  } catch {
+    // history is best effort; the transfer itself is unaffected
+  }
+}
+
+/** Friendly text for errors thrown while executing (wallet rejections, timeouts, Relay errors). */
+export function relayExecErrorText(e: unknown): string {
+  const x = e as { code?: number; message?: string; shortMessage?: string } | undefined;
+  const msg = String(x?.shortMessage ?? x?.message ?? e ?? "");
+  if (x?.code === 4001 || /user (rejected|denied)|rejected the request|request rejected|cancell?ed/i.test(msg)) return "You declined the request in your wallet. Nothing was sent.";
+  if (e instanceof RelayApiError) return relayQuoteErrorText(e);
+  if (/insufficient funds/i.test(msg)) return "Your wallet doesn't have enough gas on the source chain for this transaction.";
+  if (/does not support chain|chain missing/i.test(msg)) return "Your wallet doesn't support the source chain. Try a different wallet or chain.";
+  return msg ? msg.slice(0, 220) : "Something went wrong. Check your wallet and try again.";
+}

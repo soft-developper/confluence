@@ -61,6 +61,13 @@ interface RelayChain {
   depositEnabled?: boolean;
 }
 
+/** Relay's raw /chains entry for one chain (cached with the list). */
+export async function relayChain(upstream: RelayUpstream, id: number): Promise<unknown> {
+  const res = await upstream.request("GET", "/chains", undefined, ROUTES[0]!.cacheMs);
+  const chains = ((res.body as { chains?: RelayChain[] } | null)?.chains ?? []) as RelayChain[];
+  return chains.find((c) => c.id === id) ?? null;
+}
+
 /** v1 is EVM only: both chains must be enabled EVM chains in Relay's own /chains list. */
 export async function usableEvmChainIds(upstream: RelayUpstream): Promise<Set<number>> {
   const res = await upstream.request("GET", "/chains", undefined, ROUTES[0]!.cacheMs);

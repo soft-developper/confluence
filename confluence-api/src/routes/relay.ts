@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { ChainRegistry } from "../chains/registry.js";
 import type { Db } from "../db/client.js";
 import { ipRateLimit } from "../middleware/rateLimits.js";
-import { buildQuoteBody, findRoute, QuoteInput, usableEvmChainIds } from "../relay/proxy.js";
+import { buildQuoteBody, findRoute, QuoteInput, relayChain, usableEvmChainIds } from "../relay/proxy.js";
+import { verifyQuote } from "../relay/verify.js";
+import { relayRequests } from "../db/schema.js";
 import { appFeeRecipient, currentRelaySettings } from "../relay/settings.js";
 import { RelayBusyError, RelayNotConfiguredError, type RelayUpstream } from "../relay/upstream.js";
 
@@ -44,6 +46,7 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
     if (sdkVersion) headers["relay-sdk-version"] = sdkVersion.slice(0, 40);
 
     let body: unknown = route.method === "POST" ? (req.body ?? {}) : undefined;
+    let verifyAgainst: (QuoteInput & { recipient: string }) | null = null;
     if (route.path === "/quote/v2") {
       const settings = await currentRelaySettings(db);
       if (!settings.enabled) {
@@ -60,6 +63,7 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
         res.status(400).json({ error: "unsupported_chain", message: "Only EVM chains that Relay currently supports can be used." });
         return;
       }
+      verifyAgainst = { ...parsed.data, recipient: parsed.data.recipient ?? parsed.data.user };
       body = buildQuoteBody(parsed.data, {
         appFeeBps: settings.appFeeBps,
         appFeeRecipient: await appFeeRecipient(db, registry),
@@ -69,6 +73,14 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
 
     try {
       const out = await upstream.request(route.method, `${route.path}${query}`, body, route.cacheMs, headers);
+      if (verifyAgainst && out.status === 200) {
+        const reason = verifyQuote(out.body, verifyAgainst, await relayChain(upstream, verifyAgainst.originChainId));
+        if (reason) {
+          console.warn(`[relay] quote failed verification: ${reason} (${verifyAgainst.originChainId} -> ${verifyAgainst.destinationChainId})`);
+          res.status(502).json({ error: "quote_failed_verification", message: "This quote could not be verified, so it was not offered. Please try again." });
+          return;
+        }
+      }
       if (out.retryAfterSeconds) res.set("Retry-After", String(out.retryAfterSeconds));
       res.status(out.status).json(out.body);
     } catch (e) {
@@ -82,6 +94,44 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
     }
   };
 
+  // R3a: the browser registers each Relay request once its first transaction is sent.
+  // This record only feeds history and analytics; statuses come from Relay (R3b).
+  const registerLimit = ipRateLimit(20);
+  router.post("/relay-requests", registerLimit, async (req, res, next) => {
+    try {
+      const parsed = RegisterRequest.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "invalid_request", issues: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) });
+        return;
+      }
+      const r = parsed.data;
+      const settings = await currentRelaySettings(db);
+      const now = new Date();
+      await db
+        .insert(relayRequests)
+        .values({
+          requestId: r.requestId.toLowerCase(),
+          userAddress: r.user.toLowerCase(),
+          recipient: r.recipient.toLowerCase(),
+          originChainId: r.originChainId,
+          destinationChainId: r.destinationChainId,
+          originCurrency: r.originCurrency.toLowerCase(),
+          destinationCurrency: r.destinationCurrency.toLowerCase(),
+          symbolIn: r.symbolIn,
+          symbolOut: r.symbolOut,
+          amountIn: r.amountIn,
+          amountOutQuoted: r.amountOutQuoted ?? null,
+          appFeeBps: settings.appFeeBps,
+          inTxHash: r.inTxHash?.toLowerCase() ?? null,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: relayRequests.requestId });
+      res.status(201).json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  });
+
   router.use("/relay", (req, res, next) => {
     const run = () => proxy(req, res).catch(next);
     if (req.method === "POST" && req.path === "/quote/v2") quoteLimit(req, res, run);
@@ -92,3 +142,21 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
 }
 
 export const RelaySettingsPublic = z.object({ enabled: z.boolean(), appFeeBps: z.number() });
+
+const EVM = /^0x[0-9a-fA-F]{40}$/;
+const RegisterRequest = z
+  .object({
+    requestId: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+    user: z.string().regex(EVM),
+    recipient: z.string().regex(EVM),
+    originChainId: z.number().int().positive(),
+    destinationChainId: z.number().int().positive(),
+    originCurrency: z.string().regex(EVM),
+    destinationCurrency: z.string().regex(EVM),
+    symbolIn: z.string().min(1).max(32),
+    symbolOut: z.string().min(1).max(32),
+    amountIn: z.string().regex(/^[1-9][0-9]{0,77}$/),
+    amountOutQuoted: z.string().regex(/^[0-9]{1,78}$/).optional(),
+    inTxHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
+  })
+  .strict();

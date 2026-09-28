@@ -346,3 +346,33 @@ export const adminResetTokens = sqliteTable(
   },
   (t) => [uniqueIndex("admin_reset_tokens_hash_uq").on(t.tokenHash)],
 );
+
+/**
+ * Relay (relay.link) requests started from the Relay panel (R3a). The browser registers a
+ * request once its first transaction is sent; status is advanced by Relay's webhook and a
+ * backup check (R3b). (confluence:relay-requests)
+ */
+export const relayRequests = sqliteTable(
+  "relay_requests",
+  {
+    requestId: text("request_id").primaryKey(),
+    userAddress: text("user_address").notNull(),
+    recipient: text("recipient").notNull(),
+    originChainId: integer("origin_chain_id").notNull(),
+    destinationChainId: integer("destination_chain_id").notNull(),
+    originCurrency: text("origin_currency").notNull(),
+    destinationCurrency: text("destination_currency").notNull(),
+    symbolIn: text("symbol_in").notNull(),
+    symbolOut: text("symbol_out").notNull(),
+    amountIn: text("amount_in").notNull(),
+    amountOutQuoted: text("amount_out_quoted"),
+    appFeeBps: integer("app_fee_bps").notNull(),
+    status: text("status").notNull().default("waiting"),
+    inTxHash: text("in_tx_hash"),
+    outTxHash: text("out_tx_hash"),
+    failReason: text("fail_reason"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("relay_requests_user_idx").on(t.userAddress), index("relay_requests_status_idx").on(t.status)],
+);
