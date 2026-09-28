@@ -1,0 +1,61 @@
+---
+title: How we keep you safe
+description: The protections built into Confluence, and how to protect yourself.
+---
+
+import { Callout } from "nextra/components";
+
+# How we keep you safe
+
+Safety starts with one design choice: **Confluence never holds your funds or your keys.** Everything else on this page builds on that.
+
+## You sign everything
+
+- Every approval, burn, swap and Relay transfer is a transaction **you** review and sign in your own wallet.
+- Confluence has no way to move, pause or reverse your funds on its own. The only way funds move is a transaction you approve, which is also why it's worth reading what your wallet asks you to sign (see "Protect yourself" below).
+
+## Signing in is not a transaction
+
+Signing in uses a standard Sign-In with Ethereum message. It's free, costs no gas, and can't move funds. Your session lasts up to 7 days, and Confluence stores only a one-way fingerprint (hash) of your session, never the session itself.
+
+## Checks before you send
+
+- **Lookalike warning:** if a recipient looks like an address you've used or saved but is different, you're warned about address poisoning.
+- **Contract warning:** if the recipient is a smart contract that may not be able to handle USDC, you're warned before you continue.
+- **Gas warning:** if your wallet may not have enough gas for the transaction, you're told before your wallet fails.
+- **Clear totals:** the review shows every fee and the total that leaves your wallet, before you sign.
+
+## Verified Relay quotes
+
+Before any Relay quote reaches your wallet, Confluence checks it against Relay's own published data for that chain:
+
+- each transaction may only go to Relay's contracts,
+- any token approval may only be granted to Relay's contracts,
+- and the quote must match the tokens, chains, amount and recipient you asked for.
+
+A quote that doesn't pass is never shown to you.
+
+## Behind the scenes
+
+- **Service keys never reach your browser.** Confluence's keys for Circle and Relay are kept on the server.
+- **Signed updates only.** Status updates from Relay are checked for Relay's signature, so they can't be faked.
+- **Rate limits** keep the service available for everyone, even under heavy or abusive traffic.
+- **Protected administration.** Confluence's admin tools require two-factor authentication and are protected against repeated sign-in attempts.
+- **Kill switches.** Bridging, swapping, Relay routes and individual chains can each be paused instantly if something looks wrong. Transfers already in progress keep completing.
+- **Fees in a multisig.** Confluence's fees go to a 2-of-3 multisig wallet, which needs two separate keys to move anything.
+
+## Protect yourself
+
+<Callout type="warning">
+  **Confluence will never ask for your seed phrase or private key**, and never contacts you first by direct message. Anyone who does is a
+  scammer.
+</Callout>
+
+- Always check the site address is **app.confluencebuild.xyz** before connecting your wallet.
+- Read what your wallet asks you to sign. Confluence's transactions go to Circle's and Relay's contracts, never to unknown addresses.
+- Double-check recipient addresses character by character, especially if you copied them from your transaction history.
+- Keep your wallet software up to date, and consider a hardware wallet for larger amounts.
+
+## Report a vulnerability
+
+If you believe you've found a security issue in Confluence, please email **support@confluencebuild.xyz** with the details and how to reproduce it. Please give us a reasonable chance to fix it before sharing it publicly. We appreciate responsible reports.

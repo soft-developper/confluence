@@ -1,0 +1,110 @@
+---
+title: How Confluence works
+description: What happens behind the scenes when you bridge, swap or use a Relay route.
+---
+
+import { Callout } from "nextra/components";
+
+# How Confluence works
+
+Confluence is an interface. Your funds always move between **your wallet** and the protocols that do the actual work: **Circle** for CCTP bridges and App Kit swaps, and **Relay** for Relay routes. Confluence prepares each step, checks it, shows you exactly what will happen, and follows it until it's done.
+
+## The big picture
+
+```mermaid
+flowchart LR
+  W["Your wallet<br/>(you sign every step)"]
+  A["Confluence app<br/>(what you see)"]
+  S["Confluence service<br/>(quotes, checks, tracking)"]
+  C["Circle<br/>(CCTP, attestations,<br/>Forwarding, App Kit)"]
+  R["Relay<br/>(solvers deliver<br/>Relay routes)"]
+  B[("Blockchains")]
+  A <--> S
+  A --> W
+  W --> B
+  S <--> C
+  S <--> R
+  C --> B
+  R --> B
+```
+
+- **The app** shows quotes and progress, and asks your wallet to sign.
+- **The Confluence service** prepares quotes, applies the fee rules, checks Relay quotes before you see them, and tracks every transfer so your history stays up to date.
+- **Your wallet** is the only thing that can move your funds. Confluence never holds your keys or your money.
+
+## A CCTP bridge, step by step
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant You as You and your wallet
+  participant App as Confluence
+  participant Src as Source chain
+  participant Circle as Circle
+  participant Dst as Destination chain
+  You->>App: Choose chains and amount
+  App-->>You: Quote with every fee
+  You->>Src: Approve USDC, then burn it
+  Src-->>Circle: Burn is confirmed
+  Circle-->>App: Attestation (signed proof of the burn)
+  alt Forwarding on
+    Circle->>Dst: Forwarding Service mints USDC to the recipient
+  else Forwarding off, or stalled
+    You->>Dst: Complete mint yourself
+  end
+  App-->>You: Transaction page shows Complete
+```
+
+The key idea: the destination mint only works with Circle's signed proof that the burn happened, and each burn can only be minted **once**. That's why a bridge can't be duplicated, and why anyone, including you, can safely submit the final mint.
+
+## A swap
+
+```mermaid
+sequenceDiagram
+  participant You as You and your wallet
+  participant App as Confluence
+  participant Kit as Circle App Kit
+  participant Chain as The chain
+  You->>App: Choose tokens and amount
+  App->>Kit: Get an estimate
+  Kit-->>You: Quote, minimum received, fees
+  You->>Chain: Approve (first time), then swap
+  Chain-->>You: New token in your wallet
+```
+
+## A Relay route
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant You as You and your wallet
+  participant App as Confluence
+  participant Relay as Relay
+  participant Dst as Destination
+  You->>App: Choose what you pay and receive
+  App->>Relay: Request a quote
+  Relay-->>App: Quote and transactions to sign
+  App->>App: Check every transaction against Relay's published contracts
+  App-->>You: Verified quote
+  You->>Relay: Sign and send (on the source chain)
+  Relay->>Dst: A solver delivers your tokens
+  Relay-->>App: Signed status update
+  App-->>You: History shows Complete
+```
+
+## How status updates reach you
+
+- **Bridges:** the transaction page checks for updates every 10 seconds while it's open, reading Confluence's records and Circle's status directly. Confluence also tracks transfers in the background, so your history is right even if you closed the page.
+- **Relay routes:** Relay sends Confluence a signed update each time a route's status changes. As a backup, Confluence also checks unfinished Relay routes with Relay every couple of minutes.
+
+## Principles we build by
+
+- **You stay in control.** Every movement of funds is a transaction you sign.
+- **Live, not hard-coded.** Chains and tokens come from Circle and Relay directly, so the app never offers something that stopped working.
+- **Keys stay on the server.** Confluence's service keys for Circle and Relay never reach your browser.
+- **Verify before you sign.** Quotes are checked before your wallet is asked for anything.
+
+<Callout type="info">
+  Your funds don't depend on Confluence staying online. A burned CCTP transfer can always be completed with Circle's attestation, and a Relay
+  route is delivered by Relay's own network.
+</Callout>

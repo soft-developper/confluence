@@ -1,0 +1,42 @@
+---
+title: Speed and reliability
+description: How quotes stay fresh, what happens when things are slow, and how we keep Confluence running.
+---
+
+import { Callout } from "nextra/components";
+
+# Speed and reliability
+
+## Fresh quotes
+
+- **Bridges:** a quote is valid for 60 seconds. If it expires before you confirm, the app simply gets a new one.
+- **Relay routes:** quotes refresh every 30 seconds while you look at them, and a fresh quote is fetched the moment you press Confirm.
+- **While you type,** the app waits a moment after your last keystroke before asking for a quote, so you get one accurate quote instead of many.
+
+## How long transfers take
+
+- **CCTP bridges** depend on the chain you send from. Standard waits for that chain to finalize, which is seconds on some chains and longer on others; the app shows the expected time for each chain. **Fast** shortens it where that makes a real difference.
+- **Relay routes** show an estimated time on each quote.
+
+## When something is slow
+
+- **Forwarding stalled?** If Circle's Forwarding Service hasn't delivered your USDC 30 minutes after attestation, the transaction page lets you complete the mint yourself. There's no risk of paying twice.
+- **Attestation expired?** **Complete mint** asks Circle for a fresh attestation first, with no signature needed.
+- **Relay can't complete a route?** Relay may refund you on the chain you sent from. Your history shows **Refunded**.
+- **Closed the page?** No problem. Bridges are tracked in the background, and Relay routes update through Relay's signed status updates, so your history catches up on its own.
+
+## Maintenance and pauses
+
+If we need to pause bridging, swapping, Relay routes or a single chain, the app shows a banner explaining what's affected, and new transfers of that kind are held while the pause lasts. **Transfers already in progress keep completing**, and status tracking continues.
+
+## Keeping Confluence running
+
+- Confluence is monitored around the clock, including its connection to its database.
+- Lists that change rarely, like Relay's chains and tokens, are cached so pages load quickly and we stay well within our partners' limits.
+- Identical requests made at the same moment share one answer, which keeps things fast when many people are using the app.
+- Records that never reached the blockchain (for example, a transfer you declined in your wallet) are cleaned up automatically, while anything with a transaction is always kept.
+
+<Callout type="info">
+  Your funds are on the blockchain, not on Confluence. Even if Confluence were offline, a burned CCTP transfer can still be completed with
+  Circle's attestation, and Relay routes are delivered by Relay's own network.
+</Callout>
