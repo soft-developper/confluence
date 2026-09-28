@@ -227,10 +227,22 @@ export interface RelayQuoteRequest {
   tradeType: "EXACT_INPUT";
 }
 
-export async function postRelayQuote(req: RelayQuoteRequest, signal?: AbortSignal): Promise<RelayQuote> {
+/**
+ * The quote exactly as Relay (via our verifying proxy) returned it. Execution must use this
+ * untouched: the Relay SDK reads fields our display schema doesn't keep, such as
+ * details.currencyIn.currency.chainId ("Missing chainId from quote" otherwise).
+ */
+export async function postRelayQuoteRaw(req: RelayQuoteRequest, signal?: AbortSignal): Promise<unknown> {
   const res = await fetch(`${RELAY_BASE}/quote/v2`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req), signal });
   if (!res.ok) throw await readRelayError(res);
-  return RelayQuoteSchema.parse(await res.json());
+  const body: unknown = await res.json();
+  RelayQuoteSchema.parse(body); // shape check only; the raw body is what we return
+  return body;
+}
+
+/** The quote trimmed to what the panel displays. */
+export async function postRelayQuote(req: RelayQuoteRequest, signal?: AbortSignal): Promise<RelayQuote> {
+  return RelayQuoteSchema.parse(await postRelayQuoteRaw(req, signal));
 }
 
 /** User-facing text for quote failures (Relay error codes are listed in its "Handling Quote Errors" guide). */

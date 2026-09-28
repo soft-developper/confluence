@@ -1,7 +1,7 @@
 import { adaptViemWallet, createClient, getClient, type Execute, type ProgressData } from "@relayprotocol/relay-sdk";
 import { fetchChainConfigs } from "@relayprotocol/relay-sdk/chain-utils";
 import { createWalletClient, custom, type EIP1193Provider } from "viem";
-import { postRelayQuote, RELAY_BASE, type RelayQuoteRequest } from "./relay";
+import { postRelayQuoteRaw, RELAY_BASE, type RelayQuoteRequest } from "./relay";
 import { publicEnv } from "./env";
 
 /**
@@ -54,7 +54,8 @@ export async function executeRelay(opts: {
   signal?: AbortSignal;
 }): Promise<Execute> {
   await ensureRelayClient();
-  const quote = (await postRelayQuote(opts.request, opts.signal)) as unknown as Execute;
+  // The raw quote, untouched: the SDK needs every field Relay sent (see postRelayQuoteRaw).
+  const quote = (await postRelayQuoteRaw(opts.request, opts.signal)) as Execute;
   const provider = (await opts.getProvider()) as EIP1193Provider;
   const walletClient = createWalletClient({ account: opts.account, transport: custom(provider) });
   const run = getClient().actions.execute({ quote, wallet: adaptViemWallet(walletClient), onProgress: opts.onProgress });
