@@ -68,6 +68,9 @@ const EnvSchema = z
     // unavailable until it is set. RELAY_API_URL overrides the environment default
     // (https://api.relay.link on mainnet, https://api.testnets.relay.link on testnet).
     RELAY_API_KEY: optionalString,
+    // Relay attribution domain (the "referrer" on quotes). Defaults to the host of the first
+    // CORS origin, the public app, so keep the app first in CORS_ORIGINS.
+    RELAY_REFERRER: optionalString,
     RELAY_API_URL: z.preprocess(
       (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
       origin.optional(),

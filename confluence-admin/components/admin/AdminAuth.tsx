@@ -268,7 +268,7 @@ export function ResetPasswordForm() {
     return (
       <Panel title="Password changed">
         <p className="text-sm">All sessions were signed out. Sign in with your new password and your authenticator code.</p>
-        <Link href="/admin" className="text-sm text-action-text">
+        <Link href="/" className="text-sm text-action-text">
           Go to sign in
         </Link>
       </Panel>

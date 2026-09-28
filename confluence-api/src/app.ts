@@ -78,8 +78,9 @@ export function createApp(
   app.use(swapsRouter(db, swapRegistry));
   app.use(accountRouter(db, config, registry));
   app.use(siteRouter(db));
-  // Relay attribution uses our web domain (https://docs.relay.link/references/relay-kit/sdk/createClient).
-  app.use(relayRouter(db, registry, relayUpstream, new URL(config.ADMIN_WEB_ORIGIN ?? config.CORS_ORIGINS[0]!).hostname, config.RELAY_API_KEY));
+  // Relay attribution uses the public app's domain (https://docs.relay.link/references/relay-kit/sdk/createClient),
+  // never the admin site's: ADMIN_WEB_ORIGIN now points at the separate admin dashboard.
+  app.use(relayRouter(db, registry, relayUpstream, config.RELAY_REFERRER ?? new URL(config.CORS_ORIGINS[0]!).hostname, config.RELAY_API_KEY));
   const adminDeps = {
     db,
     secretKey: config.ADMIN_SECRET_KEY,
