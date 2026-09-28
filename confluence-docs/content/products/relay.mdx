@@ -1,0 +1,55 @@
+---
+title: Relay routes
+description: Bridge and swap across more chains and tokens with Relay, from the same pages.
+---
+
+import { Callout } from "nextra/components";
+
+# Relay routes
+
+Relay routes are a second way to bridge and swap on Confluence, powered by [Relay](https://relay.link). They sit beside Confluence's own CCTP bridge and App Kit swaps: switch between **Confluence** and **Relay** at the top of the Bridge or Swap page.
+
+## When to use Relay
+
+- **Confluence (CCTP)** is built for moving USDC between the chains Confluence supports, with native USDC minted on arrival.
+- **Relay** covers many more chains and tokens, and can bridge and swap in one step, for example ETH on one chain to USDC on another.
+
+## One panel for both
+
+Relay uses a single panel for bridging and swapping. Choose what you pay with and what you want to receive:
+
+- **Same chain** on both sides: it's a **swap**.
+- **Different chains**: it's a **bridge**.
+
+The token picker lists the chains Relay supports on one side and each chain's tokens on the other, with search. You can also paste a token's contract address. For now, Relay routes cover EVM chains.
+
+## How a Relay route runs
+
+1. You get a quote. Relay's solvers compete to deliver your tokens on the other side.
+2. You confirm in your wallet. Depending on the route, that may be a network switch, a token approval, and the transfer itself.
+3. A Relay solver delivers the tokens to your wallet on the destination, and the app shows each step as it completes, with explorer links.
+
+Quotes refresh every 30 seconds while you're looking at them, and a fresh quote is fetched when you press Confirm, so you always sign current prices.
+
+<Callout type="info">
+  **Verified before you sign.** Every Relay quote is checked by Confluence against Relay's own published contracts for that chain: each
+  transaction may only go to Relay's contracts, approvals may only be granted to them, and the quote must match the tokens, chains, amount
+  and recipient you asked for. A quote that fails this check is never shown to your wallet.
+</Callout>
+
+## Fees
+
+The quote breaks down every cost:
+
+- **Execution cost:** gas and delivery costs on the route.
+- **Swap cost:** the cost of any token swap in the route.
+- **Relay platform fee:** Relay's own fee, which depends on the route.
+- **Confluence fee:** our app fee, a percentage of the value you send (shown on the quote).
+
+## Status and refunds
+
+Your Relay transfers appear in your Profile history with their status: **Waiting**, **In progress**, **Complete**, **Refunded** or **Failed**. If Relay can't complete a route, it may refund you on the chain you sent from instead. Statuses update on their own; you don't need to keep the page open for your history to catch up.
+
+<Callout type="warning">
+  Keep the page open while your wallet steps are running. Once your transaction is sent, delivery continues even if you close it.
+</Callout>

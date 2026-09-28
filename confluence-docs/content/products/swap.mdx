@@ -1,0 +1,33 @@
+---
+title: Swap
+description: Swap tokens on the same chain with Circle's App Kit.
+---
+
+import { Callout } from "nextra/components";
+
+# Swap
+
+The Swap page exchanges one token for another, powered by Circle's App Kit. You pick the chain and the two tokens, and App Kit finds a route.
+
+## The quote
+
+As you type an amount, Confluence fetches an estimate showing:
+
+- what you'll receive,
+- the **minimum received**, the least you'll get after allowing for price movement,
+- and the fees involved.
+
+## Slippage
+
+Prices can move between the moment you see a quote and the moment your swap is processed. **Slippage** is how much movement you'll accept. You can choose **0.5%**, **1%** or **3%**; Confluence uses **1%** by default.
+
+If the price moves beyond your slippage before the swap goes through, it doesn't complete at a worse price. Lower slippage protects you more but may fail more often in fast markets; higher slippage fails less often but accepts a worse worst case.
+
+## Approvals
+
+The first time you swap a particular token, your wallet may ask you to approve it before confirming the swap itself. That approval lets the swap move exactly that token on your behalf.
+
+<Callout type="info">
+  Need a token or chain the Swap page doesn't list? Switch to [Relay routes](/products/relay) at the top of the page for a much wider
+  selection.
+</Callout>

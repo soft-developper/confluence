@@ -1,0 +1,45 @@
+---
+title: The transaction page
+description: Follow a bridge from burn to mint, and finish it yourself if needed.
+---
+
+import { Callout } from "nextra/components";
+
+# The transaction page
+
+Every Confluence bridge has its own page that follows it from start to finish. You land there after confirming, and it's linked from your history. The page refreshes itself every 10 seconds while the transfer is in progress.
+
+## What it shows
+
+- **The route and amount**, with the speed you chose and whether Forwarding is on.
+- **A progress bar** with three parts: **Source**, **Attestation** and **Destination**.
+- **A timeline:** transfer created, USDC approved, burn, Circle attestation, and the mint on the destination.
+- **Details:** sender, destination (and Confluence ID if you paid one), the burn and mint transactions, with links to both chains' explorers.
+
+## Status labels
+
+| Status | What it means |
+| --- | --- |
+| **Not sent** | The transfer stopped before the burn, for example if you declined in your wallet. No USDC left your wallet. |
+| **In progress** | Your wallet steps are running or the burn is confirming. |
+| **Awaiting attestation** | The burn is confirmed and Circle is preparing its attestation. |
+| **Minting** | The mint on the destination chain has been submitted. |
+| **Ready to mint** | The attestation is ready and the mint is waiting for you to complete it. |
+| **Complete** | The USDC has arrived. |
+| **Needs attention** | Something needs a closer look; the page explains what to do. |
+
+## Completing a mint yourself
+
+You'll see a **Complete mint** button when:
+
+- Forwarding was off, and the attestation is ready.
+- Circle reports that its Forwarding Service couldn't submit the mint.
+- Forwarding hasn't delivered 30 minutes after attestation.
+
+Completing the mint needs your wallet on the destination chain, with a little of its gas token. Anyone can submit a mint for a burn, and only one can ever succeed, so there's no risk of the USDC being paid twice.
+
+If Circle's attestation has expired by the time you complete it, **Complete mint** first asks Circle for a fresh one (no signature needed), then asks you to submit the mint.
+
+<Callout type="info">
+  Your USDC is safe throughout. Once it's burned, the only place it can go is the recipient you chose, on the destination chain you chose.
+</Callout>

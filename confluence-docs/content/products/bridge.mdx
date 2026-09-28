@@ -1,0 +1,59 @@
+---
+title: Bridge (CCTP)
+description: How Confluence bridges native USDC between chains with Circle's CCTP.
+---
+
+import { Callout } from "nextra/components";
+
+# Bridge (CCTP)
+
+Confluence's bridge moves **native USDC** between chains using Circle's Cross-Chain Transfer Protocol (CCTP). Nothing is wrapped or pooled: the USDC you receive is the same USDC Circle issues on that chain.
+
+## How it works
+
+A CCTP transfer has three stages, and the transaction page shows each one:
+
+1. **Burn on the source chain.** Your wallet approves USDC, then burns it through Circle's CCTP contract. The USDC leaves your wallet and is destroyed on that chain.
+2. **Attestation.** Circle watches the burn and, once the source chain has finalized it, signs an attestation: proof that the burn happened.
+3. **Mint on the destination chain.** The attestation is used to mint the same amount of fresh USDC to the recipient on the destination chain.
+
+Because the destination mint is based on Circle's signed proof of the burn, the amount can't be duplicated: only one mint can ever succeed for each burn.
+
+## Speed: Fast or Standard
+
+How long attestation takes depends on the chain you send **from**.
+
+- **Standard** waits for the source chain to fully finalize. It's free. On some chains this takes a few seconds, on others it can take much longer. The app shows the expected time for your chain.
+- **Fast** uses Circle's Fast Transfer, which gets an attestation well before full finality, for a small CCTP fee. It's only offered where it makes a real difference; on chains that already finalize quickly, Standard is just as fast.
+
+## Delivery: Forwarding or completing it yourself
+
+- **Forwarding on:** Circle's Forwarding Service submits the destination mint for you, so the USDC simply arrives. There's a small forwarding fee, shown on the quote. Every chain Confluence offers for bridging supports Forwarding.
+- **Forwarding off:** once the attestation is ready, you submit the mint yourself from the transaction page with **Complete mint**. This needs a little of the destination chain's gas token.
+
+<Callout type="info">
+  If Forwarding hasn't delivered your USDC 30 minutes after attestation, the transaction page lets you complete the mint yourself. Anyone can
+  submit the mint and only one can succeed, so there's no risk of paying twice.
+</Callout>
+
+## Sending to someone else
+
+Turn on **Send to another address** and enter a wallet address or a Confluence ID like `@alice`. The USDC is minted directly to that address on the destination chain.
+
+Before you confirm, Confluence checks the recipient and warns you (without blocking you) when:
+
+- **The address looks like one you've used before, but is different.** Scammers create addresses that share the first and last characters of ones you trust, hoping you copy the wrong one from your history (address poisoning). Compare every character.
+- **The recipient is a smart contract.** Smart wallets such as Safe can receive and move USDC, but many other contracts can't, and USDC sent to them can be stuck for good.
+
+## Gas
+
+CCTP and the Forwarding Service never pay gas on the source chain, so your wallet needs a little of that chain's gas token for the approval and the burn. Confluence warns you when your balance looks too low. On Arc, gas is paid in USDC.
+
+## What it costs
+
+Confluence charges a platform fee of 0.30 USDC for bridges up to 1,000 USDC, and 0.10% of the amount above that. The fee is **added** to the amount you send, so the review shows both the bridge amount and the total taken from your wallet. Circle's CCTP fee (for Fast) and forwarding fee (when Forwarding is on) are shown separately on the quote.
+
+<Callout type="warning">
+  Once USDC is burned on the source chain, the transfer can't be cancelled. It will always complete to the recipient you chose, so check the
+  destination chain and address carefully.
+</Callout>
