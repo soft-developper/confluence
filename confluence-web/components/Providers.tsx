@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { fetchChains, type BridgeChain, type ChainsResponse } from "@/lib/chains";
@@ -16,12 +16,14 @@ export function useBridgeChains(): { chains: readonly BridgeChain[]; byEvmId: Re
 }
 
 function ChainsGate({ children }: { children: React.ReactNode }) {
-  const q = useQuery({ queryKey: ["chains"], queryFn: ({ signal }) => fetchChains(signal), staleTime: 5 * 60_000, retry: 3 });
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setSlow(true), 3000);
-    return () => clearTimeout(t);
-  }, []);
+  // Loads quietly, with extra retries so a slow API start (for example after idling) never shows an error too early.
+  const q = useQuery({
+    queryKey: ["chains"],
+    queryFn: ({ signal }) => fetchChains(signal),
+    staleTime: 5 * 60_000,
+    retry: 5,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
+  });
   const config = useMemo(() => (q.data ? getWagmiConfig(q.data.chains) : null), [q.data]);
 
   if (q.error) {
@@ -44,7 +46,7 @@ function ChainsGate({ children }: { children: React.ReactNode }) {
   if (!q.data || !config) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6 text-sm text-ink-muted">
-        <p aria-live="polite">{slow ? "Waking up the Confluence API, this can take up to a minute on testnet..." : "Loading..."}</p>
+        <p aria-live="polite">Loading...</p>
       </div>
     );
   }
