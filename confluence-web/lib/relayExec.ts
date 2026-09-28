@@ -58,7 +58,16 @@ export async function executeRelay(opts: {
   const quote = (await postRelayQuoteRaw(opts.request, opts.signal)) as Execute;
   const provider = (await opts.getProvider()) as EIP1193Provider;
   const walletClient = createWalletClient({ account: opts.account, transport: custom(provider) });
-  const run = getClient().actions.execute({ quote, wallet: adaptViemWallet(walletClient), onProgress: opts.onProgress });
+  const wallet = adaptViemWallet(walletClient);
+  // The SDK checks that the wallet is already on the source chain before each transaction
+  // ("Current chain id ... does not match expected chain id"); it doesn't switch for us.
+  // Switch first, using the adapter's switchChain, which adds the network to the wallet
+  // from Relay's chain list if the wallet doesn't know it yet.
+  const sourceChainId = quote.details?.currencyIn?.currency?.chainId;
+  if (typeof sourceChainId === "number" && (await wallet.getChainId()) !== sourceChainId) {
+    await wallet.switchChain(sourceChainId);
+  }
+  const run = getClient().actions.execute({ quote, wallet, onProgress: opts.onProgress });
   opts.signal?.addEventListener("abort", () => run.abortController.abort(), { once: true });
   const out = await run;
   return out.data;

@@ -27,23 +27,30 @@ const USD = /^-?[0-9]{1,15}(\.[0-9]{1,12})?$/;
 const usdOrNull = (v: unknown) => (typeof v === "string" && USD.test(v) ? String(Math.abs(Number(v))) : null);
 
 /**
- * R4: once a request has ended, read Relay's own record (GET /requests/v2?id=) for the
- * input's USD value and the app fees actually paid, so admin can compare quoted against
- * paid. Relay's docs warn that unsupported routes don't error, they just don't collect.
+ * R4: once a request has ended, read Relay's own record for the input's USD value and the
+ * app fees actually paid, so admin can compare quoted against paid (Relay's docs warn that
+ * unsupported routes don't error, they just don't collect). Uses GET /requests/v3, per
+ * https://docs.relay.link/references/api/api_guides/migrating-to-requests-v3 (v2 is
+ * deprecated, throttled from Sep 1 2026 and retired Nov 24 2026):
+ *   deposited value: data.route.actual.origin.inputCurrency (falls back to route.quoted)
+ *   paid app fees:   data.appFees.actual[].amountUsd
  * Returns true when the record was stored.
  */
 export async function enrichFromRelay(db: Db, upstream: RelayUpstream, requestId: string): Promise<boolean> {
-  const res = await upstream.request("GET", `/requests/v2?id=${requestId}`, undefined, 0);
+  const res = await upstream.request("GET", `/requests/v3?id=${requestId}`, undefined, 0);
   if (res.status !== 200) return false;
   const req = ((res.body as { requests?: unknown[] } | null)?.requests ?? [])[0] as { data?: Record<string, unknown> } | undefined;
   if (!req?.data) return false;
   const data = req.data;
-  const meta = (data.metadata ?? {}) as { currencyIn?: { amountUsd?: unknown } };
-  const fees = Array.isArray(data.appFees) ? (data.appFees as { amountUsd?: unknown }[]) : [];
-  const paid = fees.reduce((sum, f) => sum + Number(usdOrNull(f.amountUsd) ?? 0), 0);
+  type Side = { origin?: { inputCurrency?: { amountUsd?: unknown } } };
+  const route = (data.route ?? {}) as { actual?: Side; quoted?: Side };
+  const amountUsd = usdOrNull(route.actual?.origin?.inputCurrency?.amountUsd) ?? usdOrNull(route.quoted?.origin?.inputCurrency?.amountUsd);
+  const appFees = (data.appFees ?? {}) as { actual?: unknown };
+  const actual = Array.isArray(appFees.actual) ? (appFees.actual as { amountUsd?: unknown }[]) : [];
+  const paid = actual.reduce((sum, f) => sum + Number(usdOrNull(f.amountUsd) ?? 0), 0);
   await db
     .update(relayRequests)
-    .set({ amountInUsd: usdOrNull(meta.currencyIn?.amountUsd), appFeePaidUsd: String(paid), enrichedAt: new Date() })
+    .set({ amountInUsd: amountUsd, appFeePaidUsd: String(paid), enrichedAt: new Date() })
     .where(eq(relayRequests.requestId, requestId.toLowerCase()));
   return true;
 }
