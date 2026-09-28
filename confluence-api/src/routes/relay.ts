@@ -5,7 +5,7 @@ import type { Db } from "../db/client.js";
 import { ipRateLimit } from "../middleware/rateLimits.js";
 import { buildQuoteBody, findRoute, QuoteInput, relayChain, usableEvmChainIds } from "../relay/proxy.js";
 import { verifyQuote } from "../relay/verify.js";
-import { applyStatus } from "../relay/status.js";
+import { applyStatus, enrichFromRelay, TERMINAL } from "../relay/status.js";
 import { verifyRelayWebhook } from "../relay/webhook.js";
 import { relayRequests } from "../db/schema.js";
 import { appFeeRecipient, currentRelaySettings } from "../relay/settings.js";
@@ -134,6 +134,7 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
           destinationChainName: await nameOf(r.destinationChainId),
           decimalsIn: r.decimalsIn ?? null,
           decimalsOut: r.decimalsOut ?? null,
+          appFeeQuotedUsd: r.appFeeQuotedUsd ?? null,
           updatedAt: now,
         })
         .onConflictDoNothing({ target: relayRequests.requestId });
@@ -154,7 +155,9 @@ export function relayRouter(db: Db, registry: ChainRegistry, upstream: RelayUpst
       const event = (req.body ?? {}) as { event?: string; data?: Record<string, unknown> };
       const d = event.data ?? {};
       if (event.event === "request.status.updated" && typeof d.requestId === "string" && typeof d.status === "string") {
-        await applyStatus(db, { requestId: d.requestId, status: d.status, inTxHashes: d.inTxHashes, txHashes: d.txHashes, failReason: d.failReason });
+        const changed = await applyStatus(db, { requestId: d.requestId, status: d.status, inTxHashes: d.inTxHashes, txHashes: d.txHashes, failReason: d.failReason });
+        // R4: a finished request gets its USD figures from Relay's record (in the background).
+        if (changed && (TERMINAL as readonly string[]).includes(d.status.toLowerCase())) void enrichFromRelay(db, upstream, d.requestId).catch(() => false);
       }
       res.status(200).json({ ok: true });
     } catch (e) {
@@ -190,5 +193,6 @@ const RegisterRequest = z
     inTxHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
     decimalsIn: z.number().int().min(0).max(36).optional(),
     decimalsOut: z.number().int().min(0).max(36).optional(),
+    appFeeQuotedUsd: z.string().regex(/^[0-9]{1,15}(\.[0-9]{1,12})?$/).optional(),
   })
   .strict();

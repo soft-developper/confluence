@@ -19,8 +19,9 @@ import {
 } from "@/lib/adminApi";
 import { Bars, Btn, ErrorText, Field, inputCls, Panel, Stat } from "./ui";
 import { Pager, paginate } from "@/components/Pager";
+import { RelayTab } from "./RelayTab";
 
-const TABS = ["Overview", "Activity", "Problems", "Treasury", "Chains", "Maintenance", "Footer", "Account"] as const;
+const TABS = ["Overview", "Activity", "Problems", "Treasury", "Chains", "Relay", "Maintenance", "Footer", "Account"] as const;
 type Tab = (typeof TABS)[number];
 
 const pct = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
@@ -75,6 +76,7 @@ export function Dashboard({ email, onSignOut }: { email: string; onSignOut: () =
       {tab === "Problems" && <ProblemsTab items={problemsQ.data?.items} loading={problemsQ.isPending} />}
       {tab === "Treasury" && <TreasuryTab />}
       {tab === "Chains" && <ChainsTab />}
+      {tab === "Relay" && <RelayTab />}
       {tab === "Maintenance" && <MaintenanceTab />}
       {tab === "Footer" && <FooterTab />}
       {tab === "Account" && <AccountTab />}

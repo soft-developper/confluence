@@ -99,6 +99,13 @@
       "when": 1790591965677,
       "tag": "0013_relay_requests_display",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790603575937,
+      "tag": "0014_relay_requests_usd",
+      "breakpoints": true
     }
   ]
 }

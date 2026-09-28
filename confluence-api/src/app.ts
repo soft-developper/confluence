@@ -87,7 +87,7 @@ export function createApp(
     sendEmail: createEmailSender({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }),
   };
   app.use(adminRouter(adminDeps));
-  app.use(adminDataRouter(adminDeps, registry));
+  app.use(adminDataRouter(adminDeps, registry, relayUpstream));
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });

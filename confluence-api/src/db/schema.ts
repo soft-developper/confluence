@@ -376,6 +376,12 @@ export const relayRequests = sqliteTable(
     destinationChainName: text("destination_chain_name"),
     decimalsIn: integer("decimals_in"),
     decimalsOut: integer("decimals_out"),
+    // R4: USD figures for admin analytics. Quoted fee from the quote the user signed; input
+    // value and paid fee from Relay's own record (GET /requests/v2) once the request ends.
+    appFeeQuotedUsd: text("app_fee_quoted_usd"),
+    amountInUsd: text("amount_in_usd"),
+    appFeePaidUsd: text("app_fee_paid_usd"),
+    enrichedAt: integer("enriched_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },

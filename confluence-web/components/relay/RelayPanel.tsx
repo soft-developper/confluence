@@ -36,6 +36,13 @@ function fmt(v: string | undefined, max = 6): string {
   return `${w.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${t ? `.${t}` : ""}`;
 }
 
+/** The app fee as a plain positive USD figure for our records (Relay reports it as a negative impact). */
+function quotedAppFeeUsd(v: string | null | undefined): string | undefined {
+  const n = Math.abs(Number(v));
+  if (v === null || v === undefined || !Number.isFinite(n) || n >= 1e15) return undefined;
+  return n.toFixed(6).replace(/\.?0+$/, "") || "0";
+}
+
 function eta(seconds: number | null | undefined): string | null {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return null;
   if (seconds < 60) return `~${Math.max(1, Math.round(seconds))}s`;
@@ -205,6 +212,7 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
               inTxHash: hash,
               decimalsIn: from.decimals,
               decimalsOut: to.decimals,
+              appFeeQuotedUsd: quotedAppFeeUsd(p.details?.expandedPriceImpact?.app?.usd),
             });
           }
         },

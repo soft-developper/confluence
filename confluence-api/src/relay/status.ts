@@ -1,4 +1,4 @@
-import { and, eq, gt, lt, notInArray, asc } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, notInArray, asc } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { relayRequests } from "../db/schema.js";
 import type { RelayUpstream } from "./upstream.js";
@@ -22,6 +22,31 @@ export interface StatusUpdate {
 
 const HASH = /^0x[0-9a-fA-F]{64}$/;
 const firstHash = (v: unknown) => (Array.isArray(v) ? v.find((h): h is string => typeof h === "string" && HASH.test(h))?.toLowerCase() : undefined);
+
+const USD = /^-?[0-9]{1,15}(\.[0-9]{1,12})?$/;
+const usdOrNull = (v: unknown) => (typeof v === "string" && USD.test(v) ? String(Math.abs(Number(v))) : null);
+
+/**
+ * R4: once a request has ended, read Relay's own record (GET /requests/v2?id=) for the
+ * input's USD value and the app fees actually paid, so admin can compare quoted against
+ * paid. Relay's docs warn that unsupported routes don't error, they just don't collect.
+ * Returns true when the record was stored.
+ */
+export async function enrichFromRelay(db: Db, upstream: RelayUpstream, requestId: string): Promise<boolean> {
+  const res = await upstream.request("GET", `/requests/v2?id=${requestId}`, undefined, 0);
+  if (res.status !== 200) return false;
+  const req = ((res.body as { requests?: unknown[] } | null)?.requests ?? [])[0] as { data?: Record<string, unknown> } | undefined;
+  if (!req?.data) return false;
+  const data = req.data;
+  const meta = (data.metadata ?? {}) as { currencyIn?: { amountUsd?: unknown } };
+  const fees = Array.isArray(data.appFees) ? (data.appFees as { amountUsd?: unknown }[]) : [];
+  const paid = fees.reduce((sum, f) => sum + Number(usdOrNull(f.amountUsd) ?? 0), 0);
+  await db
+    .update(relayRequests)
+    .set({ amountInUsd: usdOrNull(meta.currencyIn?.amountUsd), appFeePaidUsd: String(paid), enrichedAt: new Date() })
+    .where(eq(relayRequests.requestId, requestId.toLowerCase()));
+  return true;
+}
 
 /** Applies one status update. Returns true when the stored request changed. */
 export async function applyStatus(db: Db, u: StatusUpdate): Promise<boolean> {
@@ -81,6 +106,13 @@ export function startRelayReconciler(db: Db, upstream: RelayUpstream, intervalMs
         if (res.status === 200 && typeof b.status === "string" && (await applyStatus(db, { requestId: r.requestId, ...b, status: b.status }))) changed++;
         else await db.update(relayRequests).set({ updatedAt: new Date() }).where(eq(relayRequests.requestId, r.requestId));
       }
+      // R4: fill in USD figures for finished requests that don't have them yet.
+      const toEnrich = await db
+        .select({ requestId: relayRequests.requestId })
+        .from(relayRequests)
+        .where(and(inArray(relayRequests.status, [...TERMINAL]), isNull(relayRequests.enrichedAt), gt(relayRequests.createdAt, new Date(now - 30 * 24 * 3600_000))))
+        .limit(10);
+      for (const r of toEnrich) await enrichFromRelay(db, upstream, r.requestId).catch(() => false);
       if (changed) log(`relay: backup check updated ${changed} request(s)`);
     } catch (e) {
       log(`relay: backup check failed: ${e instanceof Error ? e.message : String(e)}`);

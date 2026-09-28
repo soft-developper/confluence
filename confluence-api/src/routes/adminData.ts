@@ -10,10 +10,12 @@ import { effective, getMaintenance, SetSwitchBody, setMaintenance } from "../sit
 import { getHousekeeping, PRUNE_AFTER_MS } from "../housekeeping/pruneFailed.js";
 import { getDisabledChains, setChainEnabled } from "../chains/availability.js";
 import { sql } from "drizzle-orm";
+import { relayOverview } from "../relay/adminOverview.js";
+import type { RelayUpstream } from "../relay/upstream.js";
 import { appFeeRecipient, getRelaySettings, MAX_APP_FEE_BPS, SaveRelaySettingsBody, saveRelaySettings } from "../relay/settings.js";
 
 /** Admin dashboard data and controls (A2). Every route needs a fully signed-in admin. */
-export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
+export function adminDataRouter(d: AdminDeps, registry: ChainRegistry, relayUpstream?: RelayUpstream) {
   const router = Router();
   const active = requireAdminSession(d);
   const Range = z.enum(Object.keys(RANGES) as [keyof typeof RANGES, ...(keyof typeof RANGES)[]]);
@@ -203,6 +205,15 @@ export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
         void d.sendEmail({ to: req.admin!.email, subject: "Confluence: Relay settings changed", ...e });
       }
       res.json({ ...out, appFeeRecipient: await appFeeRecipient(d.db, registry) });
+    }),
+  );
+
+  router.get(
+    "/admin/relay/overview",
+    active,
+    handle(async (_req, res) => {
+      const recipient = await appFeeRecipient(d.db, registry);
+      res.json({ ...(await relayOverview(d.db, relayUpstream ?? ({ configured: false } as RelayUpstream), recipient)), recipient, configured: !!relayUpstream?.configured });
     }),
   );
 
