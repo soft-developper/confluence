@@ -63,6 +63,15 @@ const EnvSchema = z
     TRACKER_INTERVAL_MS: z.coerce.number().int().min(15_000).max(3_600_000).default(60_000),
     // Circle API keys are environment specific (testnet and mainnet each need their own).
     CIRCLE_API_KEY: optionalString,
+    // ---- Relay (relay.link) integration (R1) ----
+    // Server-side only (https://docs.relay.link/references/api/api-keys). Relay routes are
+    // unavailable until it is set. RELAY_API_URL overrides the environment default
+    // (https://api.relay.link on mainnet, https://api.testnets.relay.link on testnet).
+    RELAY_API_KEY: optionalString,
+    RELAY_API_URL: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      origin.optional(),
+    ),
   })
   .superRefine((env, ctx) => {
     if (!env.TURSO_DATABASE_URL.startsWith("file:") && !env.TURSO_AUTH_TOKEN) {

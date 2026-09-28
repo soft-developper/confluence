@@ -10,6 +10,7 @@ import { effective, getMaintenance, SetSwitchBody, setMaintenance } from "../sit
 import { getHousekeeping, PRUNE_AFTER_MS } from "../housekeeping/pruneFailed.js";
 import { getDisabledChains, setChainEnabled } from "../chains/availability.js";
 import { sql } from "drizzle-orm";
+import { appFeeRecipient, getRelaySettings, MAX_APP_FEE_BPS, SaveRelaySettingsBody, saveRelaySettings } from "../relay/settings.js";
 
 /** Admin dashboard data and controls (A2). Every route needs a fully signed-in admin. */
 export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
@@ -174,6 +175,34 @@ export function adminDataRouter(d: AdminDeps, registry: ChainRegistry) {
     active,
     handle(async (_req, res) => {
       res.json(await treasury(d.db, registry));
+    }),
+  );
+
+  // ---- Relay (relay.link) routes: on or off, and Confluence's app fee in bps (R1) ----
+  router.get(
+    "/admin/relay",
+    active,
+    handle(async (_req, res) => {
+      const r = await getRelaySettings(d.db);
+      res.json({ ...r, maxAppFeeBps: MAX_APP_FEE_BPS, appFeeRecipient: await appFeeRecipient(d.db, registry) });
+    }),
+  );
+  router.put(
+    "/admin/relay",
+    active,
+    handle(async (req, res) => {
+      const body = SaveRelaySettingsBody.parse(req.body);
+      const before = (await getRelaySettings(d.db)).settings;
+      const out = await saveRelaySettings(d.db, body, req.admin!.email);
+      const changes = [
+        ...(before.enabled !== out.settings.enabled ? [`Relay routes: ${out.settings.enabled ? "ON" : "OFF"}`] : []),
+        ...(before.appFeeBps !== out.settings.appFeeBps ? [`App fee: ${before.appFeeBps} bps -> ${out.settings.appFeeBps} bps`] : []),
+      ];
+      if (changes.length) {
+        const e = securityEmail("Relay settings changed", [`Changed by ${req.admin!.email} at ${new Date().toUTCString()}.`, ...changes]);
+        void d.sendEmail({ to: req.admin!.email, subject: "Confluence: Relay settings changed", ...e });
+      }
+      res.json({ ...out, appFeeRecipient: await appFeeRecipient(d.db, registry) });
     }),
   );
 
