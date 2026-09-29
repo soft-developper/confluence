@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { useConnect, useConnectors, type Connector } from "wagmi";
 
@@ -16,6 +17,11 @@ function friendlyError(e: unknown): string {
   return msg;
 }
 
+/** The generic connector is whichever wallet owns window.ethereum, so it gets a neutral name. */
+function walletName(c: Connector): string {
+  return c.id === "injected" ? "Browser wallet" : c.name;
+}
+
 function WalletIcon({ connector }: { connector: Connector }) {
   if (connector.icon) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -23,36 +29,60 @@ function WalletIcon({ connector }: { connector: Connector }) {
   }
   return (
     <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border-control bg-bg text-[13px] font-medium">
-      {connector.name.slice(0, 1)}
+      {walletName(connector).slice(0, 1)}
     </span>
   );
 }
+
+/**
+ * Wallet picker. (confluence:connect-portal)
+ *
+ * Rendered through a portal on document.body: the sticky header uses backdrop-filter,
+ * and any ancestor with backdrop-filter, filter or transform becomes the containing
+ * block for position: fixed children. Without the portal, the modal opened from the
+ * header button was laid out inside the header strip instead of the viewport.
+ *
+ * Wallet list comes from EIP-6963 (https://eips.ethereum.org/EIPS/eip-6963), which
+ * wagmi turns into one connector per announced wallet. On open we dispatch
+ * "eip6963:requestProvider" so every installed wallet announces itself again, and
+ * wait briefly before falling back to the single generic window.ethereum row.
+ */
+const DISCOVERY_WAIT_MS = 800;
 
 export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const connectors = useConnectors();
   const { mutateAsync: connect } = useConnect();
   const [view, setView] = useState<View>({ kind: "list" });
+  const [searching, setSearching] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const { detected, others } = useMemo(() => {
     const discovered = connectors.filter((c) => c.type === "injected" && c.id !== "injected");
     const generic = connectors.find((c) => c.id === "injected");
     const hasLegacy = typeof window !== "undefined" && "ethereum" in window;
-    const detectedList = discovered.length > 0 ? discovered : hasLegacy && generic ? [generic] : [];
+    // The generic row only appears when no wallet announced itself through EIP-6963.
+    const detectedList = discovered.length > 0 ? discovered : !searching && hasLegacy && generic ? [generic] : [];
     const otherList = connectors.filter((c) => c.type === "walletConnect" || c.type === "coinbaseWallet");
     return { detected: detectedList, others: otherList };
-  }, [connectors]);
+  }, [connectors, searching]);
 
   useEffect(() => {
     if (!open) return;
     setView({ kind: "list" });
+    // Ask installed wallets to announce again; wagmi's EIP-6963 store picks up any it missed.
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    setSearching(true);
+    const timer = window.setTimeout(() => setSearching(false), DISCOVERY_WAIT_MS);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     dialogRef.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   async function choose(connector: Connector) {
     setView({ kind: "connecting", connector });
@@ -86,14 +116,14 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
       >
         <span className="flex items-center gap-3">
           <WalletIcon connector={c} />
-          <span className="text-[15px] font-medium">{c.name}</span>
+          <span className="text-[15px] font-medium">{walletName(c)}</span>
         </span>
         {tag ? <span className="rounded-sm border border-destination-text px-1.5 py-0.5 font-mono text-[11px] text-destination-text">{tag}</span> : null}
       </button>
     </li>
   );
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(5,9,16,0.74)] sm:items-center" onClick={onClose}>
       <div
         ref={dialogRef}
@@ -138,7 +168,12 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
                 <ul className="flex flex-col gap-2">{others.map((c) => row(c))}</ul>
               </>
             )}
-            {detected.length === 0 && others.length === 0 && (
+            {detected.length === 0 && searching && (
+              <p className="text-xs text-ink-muted" aria-live="polite">
+                Looking for wallets in this browser...
+              </p>
+            )}
+            {detected.length === 0 && !searching && others.length === 0 && (
               <p className="text-sm text-ink-muted">No wallets available. Install a browser wallet such as MetaMask or Rabby.</p>
             )}
           </div>
@@ -147,7 +182,7 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
         {view.kind === "connecting" && (
           <div className="mt-6 flex flex-col items-center gap-3 py-6 text-center">
             <WalletIcon connector={view.connector} />
-            <p className="text-sm">Confirm the connection in {view.connector.name}...</p>
+            <p className="text-sm">Confirm the connection in {walletName(view.connector)}...</p>
             <button type="button" onClick={() => setView({ kind: "list" })} className="text-[13px] text-action-text">
               Back to all wallets
             </button>
@@ -184,6 +219,7 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
