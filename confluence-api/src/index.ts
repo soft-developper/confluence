@@ -32,8 +32,12 @@ startIdempotencySweeper(db);
 const circleLimiter = new TokenBucket(config.CIRCLE_MAX_RPS * 2, config.CIRCLE_MAX_RPS);
 const iris = new IrisClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], circleLimiter);
 
+// Relay (R3b): one shared client, so the app, the backup status check and housekeeping
+// share one rate budget.
+const relayUpstream = relayUpstreamFor(config);
+
 if (config.PRUNE_ENABLED) {
-  startHousekeeping(db, config.PRUNE_INTERVAL_MS);
+  startHousekeeping(db, config.PRUNE_INTERVAL_MS, console.log, relayUpstream);
   console.log(`housekeeping: pruning failed records every ${Math.round(config.PRUNE_INTERVAL_MS / 60_000)} min`);
 } else {
   console.log("housekeeping: off (PRUNE_ENABLED=false)");
@@ -60,8 +64,6 @@ if (config.TRACKER_ENABLED) {
   console.log("tracker: off (TRACKER_ENABLED=false)");
 }
 
-// Relay (R3b): one shared client, so the app and the backup status check share one rate budget.
-const relayUpstream = relayUpstreamFor(config);
 if (relayUpstream.configured) {
   startRelayReconciler(db, relayUpstream);
   console.log("relay: backup status check on, every 2 min");

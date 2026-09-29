@@ -1,6 +1,8 @@
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { quotes, siteSettings, swapEvents, swaps, transferEvents, transfers } from "../db/schema.js";
+import { quotes, relayRequests, siteSettings, swapEvents, swaps, transferEvents, transfers } from "../db/schema.js";
+import type { RelayUpstream } from "../relay/upstream.js";
+import { applyStatus } from "../relay/status.js";
 
 /**
  * Housekeeping: delete failed bridges and swaps that never reached the chain, 24 hours
@@ -14,6 +16,20 @@ import { quotes, siteSettings, swapEvents, swaps, transferEvents, transfers } fr
  * Its events (and, for a bridge, its single-use quote) are deleted with it, in one
  * database batch per group, and every delete re-checks the same conditions, so a record
  * that changed meanwhile is left alone.
+ *
+ * Relay requests (confluence:relay-prune): a row is created only once a transaction was
+ * sent, but that first transaction can be a token approval, and a deposit can be dropped.
+ * Relay reports "waiting" while it has not seen a deposit
+ * (https://docs.relay.link/references/api/get-intents-status-v3). A Relay row is deleted
+ * only when ALL of these hold:
+ *   - our status is "waiting" and it has no destination transaction
+ *   - it was created more than 24 hours ago
+ *   - Relay's status endpoint, asked right before the delete, still answers "waiting"
+ * An approval alone does not count as reaching the chain (same rule as bridges). If Relay
+ * reports any other status, the row is moved forward instead and kept. If Relay can't be
+ * reached, or doesn't answer with a status, the row is kept and checked on a later run.
+ * Confluence never uses Relay deposit addresses, so a waiting requestId is never filled
+ * under a different id.
  */
 export const PRUNE_AFTER_MS = 24 * 60 * 60_000;
 export const PRUNE_BATCH = 200;
@@ -27,6 +43,8 @@ export interface PruneResult {
   events: number;
   /** Quotes nobody used (no transfer), removed an hour after they expired. */
   unusedQuotes: number;
+  /** Relay requests Relay never saw a deposit for (see the rule above). */
+  relay: RelayPruneResult;
   dryRun: boolean;
 }
 
@@ -39,6 +57,79 @@ export const UNUSED_QUOTE_GRACE_MS = 60 * 60_000;
 export const QUOTE_BATCH = 1_000;
 export const QUOTE_MAX_PER_RUN = 100_000;
 
+/** Relay status checks per run (shares the API's Relay rate budget, 200/min per key). */
+export const RELAY_CHECKS_PER_RUN = 50;
+
+export interface RelayPruneResult {
+  /** Rows matching the local rule (waiting, no destination tx, over 24h old). */
+  candidates: number;
+  /** Rows Relay confirmed as still waiting: deleted (or, in a dry run, would be). */
+  pruned: number;
+  /** Rows Relay reported with another status: moved forward and kept. */
+  movedOn: number;
+  /** Rows Relay did not answer for: kept, checked again next run. */
+  unknown: number;
+  /** True when Relay isn't configured, so nothing was checked or deleted. */
+  skipped: boolean;
+}
+
+function stuckRelay(cutoff: Date) {
+  return and(eq(relayRequests.status, "waiting"), isNull(relayRequests.outTxHash), lt(relayRequests.createdAt, cutoff));
+}
+
+async function relayStatusOf(upstream: RelayUpstream, requestId: string): Promise<{ status: string; body: Record<string, unknown> } | null> {
+  try {
+    const res = await upstream.request("GET", `/intents/status/v3?requestId=${requestId}`, undefined, 0);
+    const body = (res.body ?? {}) as Record<string, unknown>;
+    if (res.status === 200 && typeof body.status === "string") return { status: body.status.toLowerCase(), body };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function pruneRelay(db: Db, upstream: RelayUpstream | undefined, cutoff: Date, dryRun: boolean): Promise<RelayPruneResult> {
+  const out: RelayPruneResult = { candidates: 0, pruned: 0, movedOn: 0, unknown: 0, skipped: false };
+  const [c] = await db.select({ n: sql<number>`count(*)` }).from(relayRequests).where(stuckRelay(cutoff));
+  out.candidates = Number(c?.n ?? 0);
+  if (out.candidates === 0) return out;
+  if (!upstream?.configured) {
+    out.skipped = true;
+    return out;
+  }
+  // Least recently touched first, so rows Relay doesn't answer for can't starve the rest.
+  const rows = await db
+    .select({ requestId: relayRequests.requestId })
+    .from(relayRequests)
+    .where(stuckRelay(cutoff))
+    .orderBy(relayRequests.updatedAt)
+    .limit(RELAY_CHECKS_PER_RUN);
+  for (const r of rows) {
+    const s = await relayStatusOf(upstream, r.requestId);
+    if (!s) {
+      out.unknown++;
+      if (!dryRun) await db.update(relayRequests).set({ updatedAt: new Date() }).where(eq(relayRequests.requestId, r.requestId));
+      continue;
+    }
+    if (s.status !== "waiting") {
+      out.movedOn++;
+      if (!dryRun) await applyStatus(db, { requestId: r.requestId, ...s.body, status: s.status });
+      continue;
+    }
+    if (dryRun) {
+      out.pruned++;
+      continue;
+    }
+    // Re-check the local rule inside the delete: a row that changed meanwhile is kept.
+    const del = await db
+      .delete(relayRequests)
+      .where(and(eq(relayRequests.requestId, r.requestId), stuckRelay(cutoff)))
+      .returning({ requestId: relayRequests.requestId });
+    out.pruned += del.length;
+  }
+  return out;
+}
+
 function prunableQuotes(cutoff: Date) {
   return and(lt(quotes.expiresAt, cutoff), sql`not exists (select 1 from ${transfers} where ${transfers.quoteId} = ${quotes.id})`);
 }
@@ -50,11 +141,22 @@ function prunableSwaps(cutoff: Date) {
   return and(eq(swaps.state, "FAILED"), isNull(swaps.swapTxHash), isNull(swaps.approvalTxHash), lt(swaps.updatedAt, cutoff));
 }
 
-export async function pruneFailed(db: Db, opts: { now?: number; dryRun?: boolean; log?: (m: string) => void } = {}): Promise<PruneResult> {
+export async function pruneFailed(
+  db: Db,
+  opts: { now?: number; dryRun?: boolean; log?: (m: string) => void; relay?: RelayUpstream } = {},
+): Promise<PruneResult> {
   const now = opts.now ?? Date.now();
   const cutoff = new Date(now - PRUNE_AFTER_MS);
   const log = opts.log ?? (() => {});
-  const out: PruneResult = { transfers: 0, swaps: 0, quotes: 0, events: 0, unusedQuotes: 0, dryRun: !!opts.dryRun };
+  const out: PruneResult = {
+    transfers: 0,
+    swaps: 0,
+    quotes: 0,
+    events: 0,
+    unusedQuotes: 0,
+    relay: { candidates: 0, pruned: 0, movedOn: 0, unknown: 0, skipped: false },
+    dryRun: !!opts.dryRun,
+  };
   const quoteCutoff = new Date(now - UNUSED_QUOTE_GRACE_MS);
 
   if (opts.dryRun) {
@@ -64,6 +166,8 @@ export async function pruneFailed(db: Db, opts: { now?: number; dryRun?: boolean
     out.transfers = Number(t?.n ?? 0);
     out.swaps = Number(s?.n ?? 0);
     out.unusedQuotes = Number(q?.n ?? 0);
+    // Read-only: asks Relay about each candidate, deletes and updates nothing.
+    out.relay = await pruneRelay(db, opts.relay, cutoff, true);
     return out;
   }
 
@@ -126,8 +230,13 @@ export async function pruneFailed(db: Db, opts: { now?: number; dryRun?: boolean
     if (del.length === 0) break;
   }
 
+  // ---- Relay requests Relay never saw a deposit for ----
+  out.relay = await pruneRelay(db, opts.relay, cutoff, false);
+
   if (out.transfers || out.swaps) log(`housekeeping: pruned ${out.transfers} failed transfers, ${out.swaps} failed swaps (${out.events} events, ${out.quotes} quotes)`);
   if (out.unusedQuotes) log(`housekeeping: removed ${out.unusedQuotes} unused expired quotes`);
+  if (out.relay.pruned || out.relay.movedOn) log(`housekeeping: removed ${out.relay.pruned} Relay requests that never deposited, moved ${out.relay.movedOn} forward`);
+  if (out.relay.skipped) log(`housekeeping: ${out.relay.candidates} waiting Relay requests not checked (Relay not configured)`);
   await recordRun(db, out, now);
   return out;
 }
@@ -140,11 +249,12 @@ async function recordRun(db: Db, r: PruneResult, now: number) {
   const prev = await getHousekeeping(db);
   const value = {
     lastRunAt: new Date(now).toISOString(),
-    lastRun: { transfers: r.transfers, swaps: r.swaps, unusedQuotes: r.unusedQuotes },
+    lastRun: { transfers: r.transfers, swaps: r.swaps, unusedQuotes: r.unusedQuotes, relay: r.relay.pruned },
     totalPruned: {
       transfers: prev.totalPruned.transfers + r.transfers,
       swaps: prev.totalPruned.swaps + r.swaps,
       unusedQuotes: prev.totalPruned.unusedQuotes + r.unusedQuotes,
+      relay: prev.totalPruned.relay + r.relay.pruned,
     },
   };
   await db
@@ -153,23 +263,23 @@ async function recordRun(db: Db, r: PruneResult, now: number) {
     .onConflictDoUpdate({ target: siteSettings.key, set: { value, updatedBy: "housekeeping", updatedAt: new Date(now) } });
 }
 
-type Counts = { transfers: number; swaps: number; unusedQuotes: number };
+type Counts = { transfers: number; swaps: number; unusedQuotes: number; relay: number };
 
 export async function getHousekeeping(db: Db): Promise<{ lastRunAt: string | null; lastRun: Counts; totalPruned: Counts }> {
   const row = await db.query.siteSettings.findFirst({ where: eq(siteSettings.key, KEY) });
   const v = (row?.value ?? {}) as Partial<{ lastRunAt: string; lastRun: Partial<Counts>; totalPruned: Partial<Counts> }>;
-  const fill = (c?: Partial<Counts>): Counts => ({ transfers: c?.transfers ?? 0, swaps: c?.swaps ?? 0, unusedQuotes: c?.unusedQuotes ?? 0 });
+  const fill = (c?: Partial<Counts>): Counts => ({ transfers: c?.transfers ?? 0, swaps: c?.swaps ?? 0, unusedQuotes: c?.unusedQuotes ?? 0, relay: c?.relay ?? 0 });
   return { lastRunAt: v.lastRunAt ?? null, lastRun: fill(v.lastRun), totalPruned: fill(v.totalPruned) };
 }
 
 /** Runs once shortly after start-up, then every `intervalMs`. Never throws. */
-export function startHousekeeping(db: Db, intervalMs: number, log: (m: string) => void = console.log) {
+export function startHousekeeping(db: Db, intervalMs: number, log: (m: string) => void = console.log, relay?: RelayUpstream) {
   let running = false;
   const run = async () => {
     if (running) return;
     running = true;
     try {
-      await pruneFailed(db, { log });
+      await pruneFailed(db, { log, relay });
     } catch (e) {
       log(`housekeeping: prune failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

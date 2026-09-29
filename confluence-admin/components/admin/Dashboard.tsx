@@ -541,12 +541,13 @@ function MaintenanceTab() {
         <Panel title="Housekeeping">
           <p className="text-sm text-ink-muted">
             Failed bridges and swaps that never reached the chain are deleted {m.housekeeping.pruneAfterHours} hours after they fail, and quotes nobody
-            used are deleted an hour after they expire, to keep the database small. Anything with a transaction, in progress, or needing recovery is
-            always kept.
+            used are deleted an hour after they expire, to keep the database small. Relay requests are deleted {m.housekeeping.pruneAfterHours} hours
+            after they start when Relay confirms it never saw a deposit (an approval alone does not count). Anything with a deposit, in progress,
+            or needing recovery is always kept.
           </p>
           <p className="font-mono text-xs text-ink-muted">
             {m.housekeeping.lastRunAt
-              ? `Last run ${new Date(m.housekeeping.lastRunAt).toLocaleString()}: removed ${m.housekeeping.lastRun.transfers} transfers, ${m.housekeeping.lastRun.swaps} swaps, ${m.housekeeping.lastRun.unusedQuotes.toLocaleString()} unused quotes. Total removed: ${m.housekeeping.totalPruned.transfers} transfers, ${m.housekeeping.totalPruned.swaps} swaps, ${m.housekeeping.totalPruned.unusedQuotes.toLocaleString()} unused quotes.`
+              ? `Last run ${new Date(m.housekeeping.lastRunAt).toLocaleString()}: removed ${m.housekeeping.lastRun.transfers} transfers, ${m.housekeeping.lastRun.swaps} swaps, ${m.housekeeping.lastRun.unusedQuotes.toLocaleString()} unused quotes, ${m.housekeeping.lastRun.relay ?? 0} Relay requests. Total removed: ${m.housekeeping.totalPruned.transfers} transfers, ${m.housekeeping.totalPruned.swaps} swaps, ${m.housekeeping.totalPruned.unusedQuotes.toLocaleString()} unused quotes, ${m.housekeeping.totalPruned.relay ?? 0} Relay requests.`
               : "Not run yet (it runs about a minute after the API starts, then every hour)."}
           </p>
         </Panel>
