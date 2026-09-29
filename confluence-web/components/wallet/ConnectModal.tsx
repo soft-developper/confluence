@@ -35,7 +35,7 @@ function WalletIcon({ connector }: { connector: Connector }) {
 }
 
 /**
- * Wallet picker. (confluence:connect-portal)
+ * Wallet picker. (confluence:connect-portal) (confluence:connect-dedupe)
  *
  * Rendered through a portal on document.body: the sticky header uses backdrop-filter,
  * and any ancestor with backdrop-filter, filter or transform becomes the containing
@@ -57,7 +57,13 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const { detected, others } = useMemo(() => {
-    const discovered = connectors.filter((c) => c.type === "injected" && c.id !== "injected");
+    // One row per wallet: EIP-6963 connectors use the wallet's rdns as their id, so keep the first per id.
+    const seen = new Set<string>();
+    const discovered = connectors.filter((c) => {
+      if (c.type !== "injected" || c.id === "injected" || seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
     const generic = connectors.find((c) => c.id === "injected");
     const hasLegacy = typeof window !== "undefined" && "ethereum" in window;
     // The generic row only appears when no wallet announced itself through EIP-6963.
@@ -131,7 +137,7 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
         aria-modal="true"
         aria-labelledby="connect-title"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[420px] rounded-t-lg border border-border bg-surface-raised p-6 sm:rounded-lg"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-[420px] overflow-y-auto overscroll-contain rounded-t-lg border border-border bg-surface-raised p-6 sm:rounded-lg"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
