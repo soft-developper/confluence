@@ -54,8 +54,10 @@ export function defaults(chains: RelayChain[], preset: "bridge" | "swap", wallet
   const first = chains.find((c) => c.id === walletChainId) ?? chains[0];
   if (!first) return null;
   if (preset === "swap") {
-    const to = first.featured.find((t) => !sameToken(t, first.native)) ?? null;
-    return { from: first.native, to };
+    // Start from the gas token only when Relay lists it (on Arc, the featured USDC instead).
+    const from = first.nativeListed ? first.native : (first.featured[0] ?? first.native);
+    const to = first.featured.find((t) => !sameToken(t, from)) ?? null;
+    return { from, to };
   }
   const from = first.featured[0] ?? first.native;
   const other = chains.find((c) => c.id !== first.id);

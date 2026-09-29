@@ -96,7 +96,16 @@ export interface RelayChain {
   rpcUrl: string | undefined;
   explorerUrl: string | undefined;
   iconUrl: string | undefined;
+  /** The gas token. Uses Relay's featured entry (with its logo) when Relay lists it there. */
   native: RelayToken;
+  /**
+   * False when Relay's featuredTokens has no entry for the gas token. Arc is the example:
+   * its gas currency is USDC at 0x0 (18 decimals), while Relay features only the ERC-20
+   * USDC at 0x3600... (6 decimals), the same balance. The picker then hides the 0x0 entry
+   * so the same money never shows twice. (confluence:relay-native-listing)
+   */
+  nativeListed: boolean;
+  /** Relay's curated tokens for this chain, in Relay's order (the gas token first when listed). */
   featured: RelayToken[];
 }
 
@@ -111,16 +120,18 @@ export function toRelayChains(raw: unknown): RelayChain[] {
     if (!p.success) continue;
     const c = p.data;
     if (c.vmType !== "evm" || c.disabled || c.depositEnabled === false) continue;
-    const native: RelayToken = {
+    const featured = (c.featuredTokens ?? [])
+      .filter((t) => t.address && EVM_ADDRESS.test(t.address) && t.symbol && typeof t.decimals === "number")
+      .map((t) => ({ chainId: c.id, address: t.address!, symbol: t.symbol!, name: t.name ?? t.symbol!, decimals: t.decimals!, logoURI: t.metadata?.logoURI ?? undefined }));
+    // Relay's own featured entry for the gas token carries its logo; the chain's "currency" field has none.
+    const featuredNative = featured.find((t) => t.address.toLowerCase() === NATIVE_ADDRESS);
+    const native: RelayToken = featuredNative ?? {
       chainId: c.id,
       address: c.currency?.address && EVM_ADDRESS.test(c.currency.address) ? c.currency.address : NATIVE_ADDRESS,
       symbol: c.currency?.symbol ?? "ETH",
       name: c.currency?.name ?? c.currency?.symbol ?? "Native",
       decimals: c.currency?.decimals ?? 18,
     };
-    const featured = (c.featuredTokens ?? [])
-      .filter((t) => t.address && EVM_ADDRESS.test(t.address) && t.symbol && typeof t.decimals === "number")
-      .map((t) => ({ chainId: c.id, address: t.address!, symbol: t.symbol!, name: t.name ?? t.symbol!, decimals: t.decimals!, logoURI: t.metadata?.logoURI ?? undefined }));
     out.push({
       id: c.id,
       name: c.displayName ?? c.name ?? `Chain ${c.id}`,
@@ -128,6 +139,7 @@ export function toRelayChains(raw: unknown): RelayChain[] {
       explorerUrl: c.explorerUrl ?? undefined,
       iconUrl: c.iconUrl ?? undefined,
       native,
+      nativeListed: !!featuredNative,
       featured,
     });
   }

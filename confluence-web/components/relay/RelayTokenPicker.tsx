@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDebounced } from "@/hooks/useDebounced";
-import { searchRelayTokens, sameToken, type RelayChain, type RelayToken } from "@/lib/relay";
+import { isNative, searchRelayTokens, sameToken, type RelayChain, type RelayToken } from "@/lib/relay";
 import { TokenIcon } from "./TokenIcon";
 
 /**
@@ -58,13 +58,16 @@ export function RelayTokenPicker({
     retry: 1,
   });
 
-  // The chain's native and featured tokens lead the default list, then Relay's list.
+  // Relay's featured tokens lead the default list (the gas token first, with its logo, when
+  // Relay lists it), then Relay's default list. When Relay doesn't feature the gas token
+  // (Arc: the same USDC as the featured ERC-20), its 0x0 entry is hidden, in search too.
+  // (confluence:relay-native-listing)
   const tokens = useMemo(() => {
     const fromApi = tokensQ.data ?? [];
-    if (!chain || term.trim()) return fromApi;
-    const lead = [chain.native, ...chain.featured];
+    const visible = (t: RelayToken) => !chain || chain.nativeListed || !isNative(t);
+    if (!chain || term.trim()) return fromApi.filter(visible);
     const merged: RelayToken[] = [];
-    for (const t of [...lead, ...fromApi]) if (!merged.some((m) => sameToken(m, t))) merged.push(t);
+    for (const t of [...chain.featured, ...fromApi]) if (visible(t) && !merged.some((m) => sameToken(m, t))) merged.push(t);
     return merged;
   }, [tokensQ.data, chain, term]);
 
