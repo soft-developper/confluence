@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDebounced } from "@/hooks/useDebounced";
 import { isNative, searchRelayTokens, sameToken, type RelayChain, type RelayToken } from "@/lib/relay";
 import { TokenIcon } from "./TokenIcon";
+import { focusUnlessTouch, useScrollLock } from "@/lib/mobileUi";
 
 /**
  * Chain and token selector for the Relay panel, in the relay.link style: chains on the
@@ -43,11 +44,12 @@ export function RelayTokenPicker({
     setChainId(lockChainId ?? initialChainId ?? chains[0]?.id);
     setQ("");
     setChainQ("");
-    inputRef.current?.focus({ preventScroll: true });
+    focusUnlessTouch(inputRef.current);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, initialChainId, lockChainId, chains, onClose]);
+  useScrollLock(open);
 
   const chain = chains.find((c) => c.id === chainId);
   const tokensQ = useQuery({
@@ -86,7 +88,7 @@ export function RelayTokenPicker({
         aria-modal="true"
         aria-labelledby="relay-picker-title"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-[85vh] max-h-[640px] w-full max-w-[640px] flex-col rounded-t-lg border border-border bg-surface-raised p-5 sm:rounded-lg sm:p-6"
+        className="flex h-[85dvh] max-h-[640px] w-full max-w-[640px] flex-col rounded-t-lg border border-border bg-surface-raised p-5 sm:rounded-lg sm:p-6"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -134,7 +136,7 @@ export function RelayTokenPicker({
                 placeholder="Search chains"
                 className="h-10 rounded-md border border-border-control bg-bg px-3 text-sm outline-none focus:border-action-text"
               />
-              <ul className="mt-2 flex flex-col gap-1 overflow-y-auto pr-1">
+              <ul className="mt-2 flex flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
                 {chainList.map((c) => (
                   <li key={c.id}>
                     <button
@@ -164,7 +166,7 @@ export function RelayTokenPicker({
               placeholder="Search name, symbol or paste an address"
               className="h-10 rounded-md border border-border-control bg-bg px-3 text-sm outline-none focus:border-action-text"
             />
-            <ul className="mt-2 flex flex-col gap-1 overflow-y-auto" aria-busy={tokensQ.isFetching}>
+            <ul className="mt-2 flex flex-col gap-1 overflow-y-auto overscroll-contain" aria-busy={tokensQ.isFetching}>
               {tokens.map((t) => {
                 const isSel = sameToken(t, selected);
                 return (

@@ -92,6 +92,20 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
+/* Phones and tablets (confluence:mobile-layout). iOS Safari zooms the whole page into any form
+   field whose text is under 16px and does not zoom back out, which shifts the layout. On touch
+   screens the small fields use 16px; larger ones (such as the 22px amount) are unchanged. */
+@media (pointer: coarse) {
+  input.text-xs,
+  input.text-sm,
+  select.text-xs,
+  select.text-sm,
+  textarea.text-xs,
+  textarea.text-sm {
+    font-size: 16px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -373,8 +373,8 @@ function StatusIcon({ done, active }: { done: boolean; active: boolean }) {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="font-mono text-[13px]">{value}</dd>
+      <dt className="shrink-0 text-ink-muted">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-mono text-[13px]">{value}</dd>
     </div>
   );
 }

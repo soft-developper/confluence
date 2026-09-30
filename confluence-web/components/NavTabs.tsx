@@ -22,7 +22,7 @@ export function NavTabs() {
             key={t.href}
             href={t.href}
             aria-current={active ? "page" : undefined}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${active ? "bg-surface text-ink" : "text-ink-muted hover:text-ink"}`}
+            className={`rounded-md px-3 py-2 text-sm font-medium sm:py-1.5 ${active ? "bg-surface text-ink" : "text-ink-muted hover:text-ink"}`}
           >
             {t.label}
           </Link>
@@ -33,7 +33,7 @@ export function NavTabs() {
         href={DOCS_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted hover:text-ink"
+        className="rounded-md px-3 py-2 text-sm font-medium text-ink-muted hover:text-ink sm:py-1.5"
       >
         Docs
       </a>

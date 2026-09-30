@@ -329,7 +329,7 @@ export function SwapCard() {
               aria-label="Receive on network"
               value={dest?.id ?? chain.id}
               onChange={(e) => setDestId(e.target.value)}
-              className="h-7 rounded-[4px] border border-border-control bg-surface px-1.5 text-xs"
+              className="h-9 rounded-[4px] border border-border-control bg-surface px-1.5 text-xs sm:h-7"
             >
               {swapChains.map((c) => (
                 <option key={c.id} value={c.id}>

@@ -12,6 +12,7 @@ import {
 } from "@/lib/addressBook";
 import { shortAddress, type BridgeChain } from "@/lib/chains";
 import { useIdRecipient } from "@/hooks/useIdRecipient";
+import { focusUnlessTouch, useScrollLock } from "@/lib/mobileUi";
 
 const inputCls =
   "h-10 rounded-md border border-border-control bg-bg px-3 text-sm outline-none focus:border-action-text";
@@ -177,11 +178,12 @@ function AddressBookPicker({
     setQ("");
     setEditing(null);
     setConfirmDelete(null);
-    searchRef.current?.focus({ preventScroll: true });
+    focusUnlessTouch(searchRef.current);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+  useScrollLock(open);
 
   const s = q.trim().toLowerCase();
   const savedList = useMemo(
@@ -204,7 +206,7 @@ function AddressBookPicker({
         aria-modal="true"
         aria-labelledby="book-title"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[85vh] w-full max-w-[460px] flex-col gap-4 rounded-t-lg border border-border bg-surface-raised p-6 sm:rounded-lg"
+        className="flex max-h-[85dvh] w-full max-w-[460px] flex-col gap-4 rounded-t-lg border border-border bg-surface-raised p-6 sm:rounded-lg"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -227,7 +229,7 @@ function AddressBookPicker({
           className={inputCls}
         />
 
-        <div className="-mx-2 flex flex-col gap-4 overflow-y-auto px-2">
+        <div className="-mx-2 flex flex-col gap-4 overflow-y-auto overscroll-contain px-2">
           <section aria-labelledby="book-saved" className="flex flex-col gap-1">
             <h3 id="book-saved" className="text-xs font-medium tracking-wide text-ink-muted uppercase">
               Saved

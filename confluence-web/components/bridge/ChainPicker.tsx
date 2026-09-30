@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { BridgeChain } from "@/lib/chains";
 import { ChainDot } from "./ChainDot";
 import { SpeedBadge } from "./SpeedBadge";
+import { focusUnlessTouch, useScrollLock } from "@/lib/mobileUi";
 
 export function ChainPicker({
   open,
@@ -29,11 +30,12 @@ export function ChainPicker({
   useEffect(() => {
     if (!open) return;
     setQ("");
-    inputRef.current?.focus({ preventScroll: true });
+    focusUnlessTouch(inputRef.current);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+  useScrollLock(open);
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
     return s ? chains.filter((c) => c.name.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)) : chains;
@@ -47,7 +49,7 @@ export function ChainPicker({
         aria-modal="true"
         aria-labelledby="picker-title"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[85vh] w-full max-w-[460px] flex-col rounded-t-lg border border-border bg-surface-raised p-6 sm:rounded-lg"
+        className="flex max-h-[85dvh] w-full max-w-[460px] flex-col rounded-t-lg border border-border bg-surface-raised p-6 sm:rounded-lg"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -76,7 +78,7 @@ export function ChainPicker({
           placeholder="Base"
           className="mt-1.5 h-11 rounded-md border border-border-control bg-bg px-3 text-sm outline-none focus:border-action-text"
         />
-        <ul className="mt-3 flex flex-col gap-1.5 overflow-y-auto">
+        <ul className="mt-3 flex flex-col gap-1.5 overflow-y-auto overscroll-contain">
           {list.map((c) => {
             const disabled = c.id === disabledId;
             const selected = c.id === selectedId;

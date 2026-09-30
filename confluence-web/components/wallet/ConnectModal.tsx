@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { useConnect, useConnectors, type Connector } from "wagmi";
+import { useScrollLock } from "@/lib/mobileUi";
 
 type View =
   | { kind: "list" }
@@ -80,6 +81,7 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
   const [searching, setSearching] = useState(false);
   const [mobile, setMobile] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  useScrollLock(open);
 
   const { detected, others } = useMemo(() => {
     // One row per wallet: EIP-6963 connectors use the wallet's rdns as their id, so keep the first per id.
