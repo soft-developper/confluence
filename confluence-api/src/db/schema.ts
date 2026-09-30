@@ -92,6 +92,9 @@ export const transfers = sqliteTable(
     index("transfers_sender_idx").on(t.sender),
     index("transfers_tracked_at_idx").on(t.trackedAt),
     index("transfers_state_verified_idx").on(t.state, t.verifiedAt),
+    // History looks wallets up case-insensitively (confluence:indexed-history).
+    index("transfers_sender_lower_idx").on(sql`lower("sender")`),
+    index("transfers_recipient_lower_idx").on(sql`lower("recipient")`),
   ],
 );
 
@@ -186,6 +189,7 @@ export const swaps = sqliteTable(
   (t) => [
     uniqueIndex("swaps_idempotency_key_uq").on(t.idempotencyKey),
     index("swaps_state_verified_idx").on(t.state, t.verifiedAt),
+    index("swaps_sender_lower_idx").on(sql`lower("sender")`),
     uniqueIndex("swaps_swap_tx_hash_uq").on(t.swapTxHash),
     index("swaps_sender_idx").on(t.sender),
     index("swaps_state_idx").on(t.state),
@@ -224,12 +228,17 @@ export const accounts = sqliteTable(
 );
 
 /** Single-use Sign-In with Ethereum nonces (EIP-4361). */
-export const authNonces = sqliteTable("auth_nonces", {
-  nonce: text("nonce").primaryKey(),
-  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-  usedAt: integer("used_at", { mode: "timestamp_ms" }),
-  createdAt: createdAt(),
-});
+export const authNonces = sqliteTable(
+  "auth_nonces",
+  {
+    nonce: text("nonce").primaryKey(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  // Expired rows are removed by housekeeping (confluence:auth-cleanup).
+  (t) => [index("auth_nonces_expires_idx").on(t.expiresAt)],
+);
 
 /** Session tokens: only the sha256 is stored; 7-day expiry; revocable. */
 export const sessions = sqliteTable(
@@ -245,7 +254,7 @@ export const sessions = sqliteTable(
     lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("sessions_token_hash_uq").on(t.tokenHash), index("sessions_address_idx").on(t.address)],
+  (t) => [uniqueIndex("sessions_token_hash_uq").on(t.tokenHash), index("sessions_address_idx").on(t.address), index("sessions_expires_idx").on(t.expiresAt)],
 );
 
 /**
@@ -338,7 +347,11 @@ export const adminSessions = sqliteTable(
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("admin_sessions_token_hash_uq").on(t.tokenHash), index("admin_sessions_admin_idx").on(t.adminId)],
+  (t) => [
+    uniqueIndex("admin_sessions_token_hash_uq").on(t.tokenHash),
+    index("admin_sessions_admin_idx").on(t.adminId),
+    index("admin_sessions_expires_idx").on(t.expiresAt),
+  ],
 );
 
 /** Password reset links: single use, 15 minutes, only the sha256 is stored. */
@@ -354,7 +367,7 @@ export const adminResetTokens = sqliteTable(
     usedAt: integer("used_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("admin_reset_tokens_hash_uq").on(t.tokenHash)],
+  (t) => [uniqueIndex("admin_reset_tokens_hash_uq").on(t.tokenHash), index("admin_reset_tokens_expires_idx").on(t.expiresAt)],
 );
 
 /**

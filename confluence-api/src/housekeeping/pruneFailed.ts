@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { quotes, relayRequests, siteSettings, swapEvents, swaps, transferEvents, transfers } from "../db/schema.js";
+import { adminResetTokens, adminSessions, authNonces, quotes, relayRequests, sessions, siteSettings, swapEvents, swaps, transferEvents, transfers } from "../db/schema.js";
 import type { RelayUpstream } from "../relay/upstream.js";
 import { applyStatus, OWNERSHIP_GIVE_UP_MS } from "../relay/status.js";
 
@@ -36,6 +36,11 @@ import { applyStatus, OWNERSHIP_GIVE_UP_MS } from "../relay/status.js";
  * Confluence never uses Relay deposit addresses, so a waiting requestId is never filled
  * under a different id.
  *
+ * Expired sign-in data (confluence:auth-cleanup): login nonces, user and admin sessions, and
+ * admin reset tokens are only ever looked up by their token, and an expired, revoked or used
+ * one is refused anyway. They are deleted once expired (sessions and reset tokens also once
+ * revoked or used), after a one-hour grace so nothing in use is ever touched.
+ *
  * Unproven Relay rows (confluence:relay-ownership): a row Relay's record never showed to be
  * ours (no verified_at) is deleted once it is over 7 days old AND the ownership check has
  * still been asking Relay after that 7-day mark. Rows Relay shows as someone else's are
@@ -55,6 +60,8 @@ export interface PruneResult {
   unusedQuotes: number;
   /** Relay requests Relay never saw a deposit for (see the rule above). */
   relay: RelayPruneResult;
+  /** Expired or finished sign-in data removed (or, in a dry run, that would be). */
+  auth: AuthPruneResult;
   dryRun: boolean;
 }
 
@@ -98,6 +105,37 @@ async function relayStatusOf(upstream: RelayUpstream, requestId: string): Promis
   } catch {
     return null;
   }
+}
+
+export interface AuthPruneResult {
+  nonces: number;
+  sessions: number;
+  adminSessions: number;
+  resetTokens: number;
+}
+
+/** Grace after expiry, revocation or use before a sign-in row is deleted. */
+export const AUTH_GRACE_MS = 60 * 60_000;
+
+async function pruneAuth(db: Db, now: number, dryRun: boolean): Promise<AuthPruneResult> {
+  const before = new Date(now - AUTH_GRACE_MS);
+  const rules = {
+    nonces: [authNonces, lt(authNonces.expiresAt, before)],
+    sessions: [sessions, or(lt(sessions.expiresAt, before), lt(sessions.revokedAt, before))],
+    adminSessions: [adminSessions, or(lt(adminSessions.expiresAt, before), lt(adminSessions.revokedAt, before))],
+    resetTokens: [adminResetTokens, or(lt(adminResetTokens.expiresAt, before), lt(adminResetTokens.usedAt, before))],
+  } as const;
+  const out: AuthPruneResult = { nonces: 0, sessions: 0, adminSessions: 0, resetTokens: 0 };
+  for (const [key, [table, where]] of Object.entries(rules) as [keyof AuthPruneResult, (typeof rules)[keyof typeof rules]][]) {
+    if (dryRun) {
+      const [c] = await db.select({ n: sql<number>`count(*)` }).from(table).where(where);
+      out[key] = Number(c?.n ?? 0);
+    } else {
+      const r = await db.delete(table).where(where);
+      out[key] = Number((r as { rowsAffected?: number }).rowsAffected ?? 0);
+    }
+  }
+  return out;
 }
 
 function unprovenRelay(now: number) {
@@ -200,6 +238,7 @@ export async function pruneFailed(
     events: 0,
     unusedQuotes: 0,
     relay: { candidates: 0, pruned: 0, movedOn: 0, unknown: 0, skipped: false, unproven: 0 },
+    auth: { nonces: 0, sessions: 0, adminSessions: 0, resetTokens: 0 },
     dryRun: !!opts.dryRun,
   };
   const quoteCutoff = new Date(now - UNUSED_QUOTE_GRACE_MS);
@@ -213,6 +252,7 @@ export async function pruneFailed(
     out.unusedQuotes = Number(q?.n ?? 0);
     // Read-only: asks Relay about each candidate, deletes and updates nothing.
     out.relay = await pruneRelay(db, opts.relay, cutoff, true);
+    out.auth = await pruneAuth(db, now, true);
     return out;
   }
 
@@ -277,6 +317,15 @@ export async function pruneFailed(
 
   // ---- Relay requests Relay never saw a deposit for ----
   out.relay = await pruneRelay(db, opts.relay, cutoff, false);
+
+  // ---- expired sign-in data ----
+  out.auth = await pruneAuth(db, now, false);
+  const authTotal = out.auth.nonces + out.auth.sessions + out.auth.adminSessions + out.auth.resetTokens;
+  if (authTotal) {
+    log(
+      `housekeeping: removed expired sign-in data (${out.auth.nonces} nonces, ${out.auth.sessions} sessions, ${out.auth.adminSessions} admin sessions, ${out.auth.resetTokens} reset tokens)`,
+    );
+  }
 
   if (out.transfers || out.swaps) log(`housekeeping: pruned ${out.transfers} failed transfers, ${out.swaps} failed swaps (${out.events} events, ${out.quotes} quotes)`);
   if (out.unusedQuotes) log(`housekeeping: removed ${out.unusedQuotes} unused expired quotes`);

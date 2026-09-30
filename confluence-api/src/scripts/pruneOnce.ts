@@ -31,4 +31,8 @@ console.log(
 console.log(
   `[${config.CONFLUENCE_ENV}] relay: ${rl.unproven} requests never proven to be Confluence's after 7 days of checks (${dryRun ? "would delete" : "deleted"})`,
 );
+const a = r.auth;
+console.log(
+  `[${config.CONFLUENCE_ENV}] sign-in data: ${a.nonces} nonces, ${a.sessions} sessions, ${a.adminSessions} admin sessions, ${a.resetTokens} reset tokens expired or finished over 1h ago (${dryRun ? "would delete" : "deleted"})`,
+);
 db.$client.close();

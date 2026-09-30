@@ -127,6 +127,13 @@
       "when": 1790761687694,
       "tag": "0017_verified_swaps",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790762851214,
+      "tag": "0018_indexed_history_auth_cleanup",
+      "breakpoints": true
     }
   ]
 }
