@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { EIP1193Provider } from "viem";
 import type { SwapResult } from "@circle-fin/app-kit";
 import { ApiError, postSwap, postSwapEvent, type CreatedSwap, type SwapReportBody, type SwapTokenSymbol } from "@/lib/api";
@@ -8,6 +8,7 @@ import type { BridgeChain } from "@/lib/chains";
 import { developerFee, loadSwapKit, withTxCapture } from "@/lib/swapKit";
 import { saveTransferToken } from "@/lib/transferToken";
 import { enqueueSwapReport } from "@/lib/reportOutbox";
+import { useLeaveGuard } from "@/lib/leaveGuard";
 
 export interface SwapRun {
   phase: "idle" | "preparing" | "running" | "success" | "error";
@@ -40,12 +41,8 @@ export function useSwapExecution() {
   const [run, setRun] = useState<SwapRun>({ phase: "idle" });
   const busy = run.phase === "preparing" || run.phase === "running";
 
-  useEffect(() => {
-    if (!busy) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [busy]);
+  // Ask before leaving mid-swap: tab close, reload and in-app links (confluence:leave-guard).
+  useLeaveGuard(busy);
 
   const start = useCallback(
     async (a: StartSwapArgs) => {

@@ -26,6 +26,7 @@ import {
 } from "@/lib/relay";
 import { RelayTokenPicker } from "./RelayTokenPicker";
 import { TokenIcon } from "./TokenIcon";
+import { useLeaveGuard } from "@/lib/leaveGuard";
 
 const AMOUNT_INPUT = /^\d{0,18}(\.\d{0,18})?$/;
 
@@ -80,6 +81,8 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
 
   const [view, setView] = useState<"form" | "review" | "run">("form");
   const [run, setRun] = useState<{ phase: "running" | "success" | "refunded" | "error"; progress: ProgressData | null; error?: string } | null>(null);
+  // Ask before leaving while a Relay route runs: tab close, reload and in-app links (confluence:leave-guard).
+  useLeaveGuard(run?.phase === "running");
   const registered = useRef(false);
 
   const chainsQ = useQuery({ queryKey: ["relay-chains"], queryFn: ({ signal }) => fetchRelayChains(signal), staleTime: 60 * 60_000, retry: 2 });

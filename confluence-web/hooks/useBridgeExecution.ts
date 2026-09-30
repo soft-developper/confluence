@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { EIP1193Provider } from "viem";
 import type { BridgeChain as KitChain, BridgeResult, BridgeStep, BridgeWarning } from "@circle-fin/app-kit";
 import { ApiError, postTransfer, postTransferEvent, transferErrorText, type CreatedTransfer, type Quote, type StepReportBody } from "@/lib/api";
 import { loadBridgeKit, type LoadedBridgeKit } from "@/lib/bridgeKit";
 import { saveTransferToken } from "@/lib/transferToken";
 import { enqueueTransferReport } from "@/lib/reportOutbox";
+import { useLeaveGuard } from "@/lib/leaveGuard";
 import { recordRecipient } from "@/lib/addressBook";
 import type { BridgeChain } from "@/lib/chains";
 
@@ -108,13 +109,9 @@ export function useBridgeExecution() {
 
   const busy = state.phase === "preparing" || state.phase === "running";
 
-  // Leaving mid-transfer loses the live progress (funds are still safe), so ask first.
-  useEffect(() => {
-    if (!busy) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [busy]);
+  // Leaving mid-transfer loses the live progress (funds are still safe), so ask first:
+  // on tab close or reload, and on in-app links (confluence:leave-guard).
+  useLeaveGuard(busy);
 
   /**
    * Sends one step report, once per (step, state). Outcome reports go through the durable

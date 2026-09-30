@@ -94,11 +94,13 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
     setView({ kind: "connecting", connector });
     let off: (() => void) | undefined;
     if (connector.type === "walletConnect") {
-      const onMessage = async ({ type, data }: { type: string; data?: unknown }) => {
-        if (type === "display_uri" && typeof data === "string") {
-          const dataUrl = await QRCode.toDataURL(data, { margin: 1, width: 240, color: { dark: "#0A121F", light: "#FFFFFF" } });
-          setView({ kind: "qr", connector, uri: data, dataUrl });
-        }
+      // The QR image is drawn from WalletConnect's pairing link. If drawing fails, say so
+      // instead of waiting silently (confluence:qr-errors).
+      const onMessage = ({ type, data }: { type: string; data?: unknown }) => {
+        if (type !== "display_uri" || typeof data !== "string") return;
+        QRCode.toDataURL(data, { margin: 1, width: 240, color: { dark: "#0A121F", light: "#FFFFFF" } })
+          .then((dataUrl) => setView({ kind: "qr", connector, uri: data, dataUrl }))
+          .catch(() => setView({ kind: "error", message: "Could not show the WalletConnect QR code. Try again, or choose another wallet." }));
       };
       connector.emitter.on("message", onMessage);
       off = () => connector.emitter.off("message", onMessage);

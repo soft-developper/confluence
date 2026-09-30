@@ -210,6 +210,17 @@ export function BridgeCard() {
   useEffect(() => {
     if (reviewing && status !== "connected" && execPhase === "idle") setReviewing(false);
   }, [reviewing, status, execPhase]);
+  // Leave review if the wallet switches to another account before signing starts: the quote
+  // was made for the previous account (confluence:review-account).
+  const reviewedAddress = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!reviewing) {
+      reviewedAddress.current = undefined;
+      return;
+    }
+    if (reviewedAddress.current === undefined) reviewedAddress.current = address?.toLowerCase();
+    else if (execPhase === "idle" && address && address.toLowerCase() !== reviewedAddress.current) setReviewing(false);
+  }, [reviewing, address, execPhase]);
   // After a successful bridge, show the new source balance.
   const refetchBalance = balance.refetch;
   useEffect(() => {
