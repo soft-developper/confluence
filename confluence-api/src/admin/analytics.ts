@@ -47,19 +47,19 @@ export async function overview(db: Db, range: Range) {
   const [s] = await all(
     db,
     sql`select count(*) as total,
-          sum(case when state = 'COMPLETED' then 1 else 0 end) as completed,
+          sum(case when state = 'COMPLETED' and verified_at is not null then 1 else 0 end) as completed,
           sum(case when state = 'FAILED' then 1 else 0 end) as failed
         from swaps where created_at >= ${t0}`,
   );
   const swapVolume = await all(
     db,
     sql`select token_in as token, count(*) as swaps, sum(cast(amount_in as real)) as volume
-        from swaps where state = 'COMPLETED' and created_at >= ${t0} group by token_in order by swaps desc`,
+        from swaps where state = 'COMPLETED' and verified_at is not null and created_at >= ${t0} group by token_in order by swaps desc`,
   );
   const swapFees = await all(
     db,
     sql`select fee_token as token, sum(cast(fee_charged as real)) as fees
-        from swaps where state = 'COMPLETED' and fee_charged is not null and created_at >= ${t0} group by fee_token`,
+        from swaps where state = 'COMPLETED' and verified_at is not null and fee_charged is not null and created_at >= ${t0} group by fee_token`,
   );
   const bDone = num(b?.completed);
   const bEnded = bDone + num(b?.failed) + num(b?.recovery);
@@ -104,7 +104,7 @@ export async function timeseries(db: Db, range: Exclude<Range, "all" | "24h">, n
   const s = await all(
     db,
     sql`select date(created_at / 1000, 'unixepoch') as day, count(*) as swaps,
-          sum(case when state = 'COMPLETED' then 1 else 0 end) as swapsCompleted
+          sum(case when state = 'COMPLETED' and verified_at is not null then 1 else 0 end) as swapsCompleted
         from swaps where created_at >= ${t0} group by day`,
   );
   const bm = new Map(b.map((r) => [String(r.day), r]));

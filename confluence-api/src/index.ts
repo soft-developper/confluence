@@ -9,6 +9,7 @@ import { startTracker } from "./tracker/tracker.js";
 import { startHousekeeping } from "./housekeeping/pruneFailed.js";
 import { relayUpstreamFor, relayReferrer } from "./relay/upstream.js";
 import { startRelayReconciler } from "./relay/status.js";
+import { buildSwapRegistry } from "./swaps/tokens.js";
 import { TokenBucket } from "./lib/tokenBucket.js";
 
 function configOrExit(): Config {
@@ -54,8 +55,9 @@ if (config.TRACKER_ENABLED) {
       // Permissionless status lookup (no key): https://www.npmjs.com/package/@circle-fin/app-kit
       getSwapStatus: async (txHash, chainIn, chainOut) => {
         const r = await swapKit.getSwapStatus({ txHash, chainIn: chainIn as never, ...(chainOut ? { chainOut: chainOut as never } : {}) });
-        return { status: r.progress.status, destinationTxHash: r.destination?.txHash };
+        return { status: r.progress.status, destinationTxHash: r.destination?.txHash, amountOut: r.destination?.amount, tokenOutSymbol: r.destination?.token?.symbol };
       },
+      swapRegistry: buildSwapRegistry(config, swapKit),
     },
     config.TRACKER_INTERVAL_MS,
   );

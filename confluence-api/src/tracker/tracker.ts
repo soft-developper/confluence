@@ -6,6 +6,7 @@ import { transferEvents, transfers } from "../db/schema.js";
 import { isNonceUsed } from "./chainReads.js";
 import { decide, recheckAfterMs, STOP_CODES, verifyMessage, type Decision } from "./decide.js";
 import { trackSwapsOnce, type SwapStatusFn } from "./swaps.js";
+import type { SwapRegistry } from "../swaps/tokens.js";
 
 export interface TrackerDeps {
   db: Db;
@@ -15,6 +16,8 @@ export interface TrackerDeps {
   log?: (msg: string) => void;
   /** Stage 6a: App Kit getSwapStatus; when set, each pass also settles swaps. */
   getSwapStatus?: SwapStatusFn;
+  /** Swap chains with their RPC endpoints, to check who sent a swap (confluence:verified-swaps). */
+  swapRegistry?: SwapRegistry;
 }
 
 export interface PassResult {
@@ -166,7 +169,7 @@ export function startTracker(deps: TrackerDeps, intervalMs: number): () => void 
       const r = await trackOnce({ ...deps, log });
       if (r.checked > 0) log(`tracker: pass checked ${r.checked}, moved ${r.moved}, errors ${r.errors}`);
       if (deps.getSwapStatus) {
-        const s = await trackSwapsOnce({ db: deps.db, getSwapStatus: deps.getSwapStatus, log });
+        const s = await trackSwapsOnce({ db: deps.db, getSwapStatus: deps.getSwapStatus, swapRegistry: deps.swapRegistry, log });
         if (s.checked > 0) log(`tracker: swaps checked ${s.checked}, moved ${s.moved}, errors ${s.errors}`);
       }
     } catch (e) {

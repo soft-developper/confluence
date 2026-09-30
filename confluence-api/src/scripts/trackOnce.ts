@@ -10,6 +10,7 @@ import { createDb } from "../db/client.js";
 import { TokenBucket } from "../lib/tokenBucket.js";
 import { trackOnce } from "../tracker/tracker.js";
 import { trackSwapsOnce } from "../tracker/swaps.js";
+import { buildSwapRegistry } from "../swaps/tokens.js";
 import { AppKit } from "@circle-fin/app-kit";
 
 async function main() {
@@ -30,8 +31,9 @@ async function main() {
     db,
     getSwapStatus: async (txHash, chainIn, chainOut) => {
         const r = await kit.getSwapStatus({ txHash, chainIn: chainIn as never, ...(chainOut ? { chainOut: chainOut as never } : {}) });
-        return { status: r.progress.status, destinationTxHash: r.destination?.txHash };
+        return { status: r.progress.status, destinationTxHash: r.destination?.txHash, amountOut: r.destination?.amount, tokenOutSymbol: r.destination?.token?.symbol };
       },
+    swapRegistry: buildSwapRegistry(config, kit),
     log: (m) => console.log(m),
   });
   console.log(`[${config.CONFLUENCE_ENV}] swaps: checked ${s.checked}, moved ${s.moved}, errors ${s.errors}`);

@@ -175,7 +175,15 @@ function prunableTransfers(cutoff: Date) {
   );
 }
 function prunableSwaps(cutoff: Date) {
-  return and(eq(swaps.state, "FAILED"), isNull(swaps.swapTxHash), isNull(swaps.approvalTxHash), lt(swaps.updatedAt, cutoff));
+  return and(
+    or(
+      and(eq(swaps.state, "FAILED"), isNull(swaps.swapTxHash), isNull(swaps.approvalTxHash)),
+      // A reported swap hash Circle never saw, or a transaction sent by another wallet, is not
+      // proof this swap reached the chain (confluence:verified-swaps).
+      and(eq(swaps.state, "FAILED"), inArray(swaps.errorCode, ["not_found", "tx_sender_mismatch"]), isNull(swaps.verifiedAt)),
+    ),
+    lt(swaps.updatedAt, cutoff),
+  );
 }
 
 export async function pruneFailed(

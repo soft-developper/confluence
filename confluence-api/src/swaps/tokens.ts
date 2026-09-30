@@ -16,6 +16,8 @@ export interface SwapChain {
   name: string;
   evmChainId: number;
   tokens: { symbol: SwapToken; address: string | null; decimals: number; label: string }[];
+  /** Public RPC endpoints from App Kit, used to check who sent a swap (confluence:verified-swaps). */
+  rpcUrls: string[];
 }
 
 export interface SwapRegistry {
@@ -36,6 +38,7 @@ export function buildSwapRegistry(config: Config, kit: Pick<AppKit, "getSupporte
       eurcAddress?: string | null;
       usdtAddress?: string | null;
       nativeCurrency: { symbol: string; decimals: number };
+      rpcEndpoints?: readonly string[];
     };
     const tokens: SwapChain["tokens"] = [];
     if (d.usdcAddress) tokens.push({ symbol: "USDC", address: d.usdcAddress, decimals: 6, label: "USDC" });
@@ -45,7 +48,7 @@ export function buildSwapRegistry(config: Config, kit: Pick<AppKit, "getSupporte
     if (d.nativeCurrency.symbol !== "USDC") {
       tokens.push({ symbol: "NATIVE", address: null, decimals: d.nativeCurrency.decimals, label: d.nativeCurrency.symbol });
     }
-    chains.push({ id: d.chain, name: d.name, evmChainId: d.chainId, tokens });
+    chains.push({ id: d.chain, name: d.name, evmChainId: d.chainId, tokens, rpcUrls: [...(d.rpcEndpoints ?? [])] });
   }
   return { chains, byId: new Map(chains.map((c) => [c.id, c])) };
 }

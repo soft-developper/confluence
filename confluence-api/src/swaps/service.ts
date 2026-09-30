@@ -194,19 +194,16 @@ export async function recordSwapReport(db: Db, reg: SwapRegistry, swapId: string
       }
       break;
     case "result": {
+      // The browser's view of the result is recorded but never finishes the swap: only the
+      // tracker does, from Circle and the chain (confluence:verified-swaps). Nothing can be
+      // changed once the swap is final.
+      if (final) break;
       if (r.amountOut) patch.amountOut = r.amountOut;
       if (r.destinationTxHash && !s.destinationTxHash) patch.destinationTxHash = r.destinationTxHash.toLowerCase();
       if (r.developerFee !== undefined) {
         patch.feeCharged = r.developerFee;
         const dec = chain?.tokens.find((t) => t.symbol === (s.feeToken as SwapToken | null))?.decimals;
         if (s.feeExpected && dec !== undefined && !feeMatches(s.feeExpected, r.developerFee, dec)) patch.errorCode = "fee_mismatch";
-      }
-      if (!final && (s.state === "SUBMITTED" || s.swapTxHash)) {
-        if (r.status === "DONE") to = "COMPLETED";
-        else if (r.status === "FAILED") {
-          to = "FAILED";
-          patch.errorCode = patch.errorCode ?? "swap_failed";
-        }
       }
       break;
     }

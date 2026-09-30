@@ -176,11 +176,16 @@ export const swaps = sqliteTable(
     errorCode: text("error_code"),
     reportTokenHash: text("report_token_hash"),
     trackedAt: integer("tracked_at", { mode: "timestamp_ms" }),
+    // When the tracker confirmed the swap: Circle reports it DONE and the swap transaction
+    // was sent by this sender (confluence:verified-swaps). Only verified swaps appear in
+    // history and count in analytics.
+    verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
   },
   (t) => [
     uniqueIndex("swaps_idempotency_key_uq").on(t.idempotencyKey),
+    index("swaps_state_verified_idx").on(t.state, t.verifiedAt),
     uniqueIndex("swaps_swap_tx_hash_uq").on(t.swapTxHash),
     index("swaps_sender_idx").on(t.sender),
     index("swaps_state_idx").on(t.state),

@@ -136,7 +136,8 @@ export async function history(db: Db, address: string, opts: { page: number; pag
     or(sql`lower(${transfers.sender}) = ${address}`, sql`lower(${transfers.recipient}) = ${address}`),
     isNotNull(transfers.verifiedAt),
   )!;
-  const swapOwner = sql`lower(${swaps.sender}) = ${address}`;
+  // Swaps appear once the tracker verified them (confluence:verified-swaps).
+  const swapOwner = and(sql`lower(${swaps.sender}) = ${address}`, isNotNull(swaps.verifiedAt))!;
   const [{ n: nT } = { n: 0 }] = await db.select({ n: count() }).from(transfers).where(owner);
   const [{ n: nS } = { n: 0 }] = await db.select({ n: count() }).from(swaps).where(swapOwner);
   // Relay requests appear once Relay's record proves they are ours (confluence:relay-ownership).
@@ -149,7 +150,7 @@ export async function history(db: Db, address: string, opts: { page: number; pag
     sql`select 'bridge' as kind, id, created_at as at from transfers
           where (lower(sender) = ${address} or lower(recipient) = ${address}) and verified_at is not null
         union all
-        select 'swap' as kind, id, created_at as at from swaps where lower(sender) = ${address}
+        select 'swap' as kind, id, created_at as at from swaps where lower(sender) = ${address} and verified_at is not null
         union all
         select 'relay' as kind, request_id as id, created_at as at from relay_requests where user_address = ${address} and verified_at is not null
         order by at desc, id desc limit ${lim} offset ${offset}`,

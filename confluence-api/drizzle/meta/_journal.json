@@ -120,6 +120,13 @@
       "when": 1790758472440,
       "tag": "0016_relay_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790761687694,
+      "tag": "0017_verified_swaps",
+      "breakpoints": true
     }
   ]
 }
