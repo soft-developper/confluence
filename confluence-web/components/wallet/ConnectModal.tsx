@@ -35,6 +35,30 @@ function WalletIcon({ connector }: { connector: Connector }) {
 }
 
 /**
+ * Phones and tablets (confluence:mobile-wallets). A mobile browser has no wallet extensions,
+ * so nothing announces itself through EIP-6963 there, and wallet apps such as MetaMask are
+ * reached by leaving the browser.
+ */
+function isMobileBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+  if (uaData?.mobile) return true;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) return true;
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1; // iPadOS reports as a Mac
+}
+
+/**
+ * MetaMask's official deeplink that opens a dapp inside the MetaMask app's own browser, where
+ * MetaMask is available like an extension: https://link.metamask.io/dapp/{dappUrl}
+ * (https://docs.metamask.io/sdk/guides/use-deeplinks/). Without the app installed, MetaMask
+ * sends the user to its download page.
+ */
+function metaMaskAppLink(): string {
+  const { host, pathname, search } = window.location;
+  return `https://link.metamask.io/dapp/${host}${pathname}${search}`;
+}
+
+/**
  * Wallet picker. (confluence:connect-portal) (confluence:connect-dedupe)
  *
  * Rendered through a portal on document.body: the sticky header uses backdrop-filter,
@@ -54,6 +78,7 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
   const { mutateAsync: connect } = useConnect();
   const [view, setView] = useState<View>({ kind: "list" });
   const [searching, setSearching] = useState(false);
+  const [mobile, setMobile] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const { detected, others } = useMemo(() => {
@@ -75,6 +100,7 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
   useEffect(() => {
     if (!open) return;
     setView({ kind: "list" });
+    setMobile(isMobileBrowser());
     // Ask installed wallets to announce again; wagmi's EIP-6963 store picks up any it missed.
     window.dispatchEvent(new Event("eip6963:requestProvider"));
     setSearching(true);
@@ -89,6 +115,10 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
   }, [open, onClose]);
 
   if (!open || typeof document === "undefined") return null;
+
+  // On a phone, offer MetaMask's own app when it is not already the browser's wallet
+  // (inside MetaMask's in-app browser it announces itself and is listed as detected).
+  const showMetaMaskApp = mobile && !searching && !detected.some((c) => c.id === "io.metamask" || /metamask/i.test(c.name));
 
   async function choose(connector: Connector) {
     setView({ kind: "connecting", connector });
@@ -144,11 +174,13 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="connect-title" className="text-xl font-medium">
-              {view.kind === "qr" ? "Scan with your phone" : "Connect a wallet"}
+              {view.kind === "qr" ? (mobile ? "Connect with WalletConnect" : "Scan with your phone") : "Connect a wallet"}
             </h2>
             <p className="mt-1 text-[13px] text-ink-muted">
               {view.kind === "qr"
-                ? "Open a WalletConnect wallet and scan this code."
+                ? mobile
+                  ? "Open your wallet app on this phone to approve, or scan the code from another device."
+                  : "Open a WalletConnect wallet and scan this code."
                 : "Confluence never holds your funds. You sign every transaction."}
             </p>
           </div>
@@ -170,11 +202,40 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
                 <ul className="flex flex-col gap-2">{detected.map((c) => row(c, "Detected"))}</ul>
               </>
             )}
+            {showMetaMaskApp && (
+              <>
+                <p className="text-xs text-ink-muted">Wallet apps on this phone</p>
+                <ul className="flex flex-col gap-2">
+                  <li>
+                    <a
+                      href={metaMaskAppLink()}
+                      className="flex h-14 w-full items-center justify-between rounded-md border border-border bg-surface px-3.5 text-left hover:border-action-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text"
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border-control bg-bg text-[13px] font-medium">M</span>
+                        <span className="flex flex-col">
+                          <span className="text-[15px] font-medium">MetaMask</span>
+                          <span className="text-[12px] text-ink-muted">Opens Confluence in the MetaMask app</span>
+                        </span>
+                      </span>
+                      <span aria-hidden="true" className="text-ink-muted">
+                        ↗
+                      </span>
+                    </a>
+                  </li>
+                </ul>
+              </>
+            )}
             {others.length > 0 && (
               <>
-                <p className="text-xs text-ink-muted">{detected.length > 0 ? "Other options" : "Connect with"}</p>
+                <p className="text-xs text-ink-muted">{detected.length > 0 || showMetaMaskApp ? "Other options" : "Connect with"}</p>
                 <ul className="flex flex-col gap-2">{others.map((c) => row(c))}</ul>
               </>
+            )}
+            {mobile && detected.length === 0 && !searching && (
+              <p className="text-xs text-ink-muted">
+                Tip: on a phone, opening Confluence inside your wallet app&apos;s browser gives the smoothest experience.
+              </p>
             )}
             {detected.length === 0 && searching && (
               <p className="text-xs text-ink-muted" aria-live="polite">
@@ -199,6 +260,17 @@ export function ConnectModal({ open, onClose }: { open: boolean; onClose: () => 
 
         {view.kind === "qr" && (
           <div className="mt-4 flex flex-col gap-3">
+            {mobile && (
+              // WalletConnect pairing link: wallet apps that support WalletConnect register it,
+              // so the phone offers to open one (WalletConnect mobile linking).
+              <a
+                href={view.uri}
+                className="flex h-11 items-center justify-center rounded-md bg-action text-sm font-medium text-on-action hover:bg-action-hover"
+              >
+                Open wallet app
+              </a>
+            )}
+            {mobile && <p className="text-center text-xs text-ink-muted">or scan from another device</p>}
             <div className="flex justify-center rounded-md bg-white p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={view.dataUrl} alt="WalletConnect QR code" width={240} height={240} />
