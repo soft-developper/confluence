@@ -31,6 +31,11 @@ export function createApp(
 ) {
   const app = express();
   app.disable("x-powered-by");
+  // JSON only: browsers must never guess another content type (confluence:api-errors).
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    next();
+  });
   app.set("trust proxy", config.TRUST_PROXY_HOPS);
   setTrustedProxyHops(config.TRUST_PROXY_HOPS);
 
@@ -92,5 +97,39 @@ export function createApp(
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
   });
+  app.use(apiErrorHandler);
   return app;
 }
+
+/**
+ * Last-resort error handler (confluence:api-errors). Without it Express answers with its
+ * built-in HTML page, which includes the stack trace unless NODE_ENV=production. Every
+ * error now gets a short JSON body with no internals; 5xx details go to the server log only.
+ * Body-parser error types: https://github.com/expressjs/body-parser#errors
+ */
+const PARSER_ERRORS: Record<string, string> = {
+  "entity.parse.failed": "invalid_json",
+  "entity.too.large": "payload_too_large",
+  "encoding.unsupported": "unsupported_encoding",
+  "charset.unsupported": "unsupported_charset",
+  "request.aborted": "request_aborted",
+  "request.size.invalid": "invalid_request_size",
+  "entity.verify.failed": "invalid_request",
+};
+
+export const apiErrorHandler: express.ErrorRequestHandler = (err, req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  const e = (err ?? {}) as { type?: unknown; status?: unknown; statusCode?: unknown };
+  const raw = typeof e.status === "number" ? e.status : typeof e.statusCode === "number" ? e.statusCode : 500;
+  const status = raw >= 400 && raw < 600 ? raw : 500;
+  if (status >= 500) {
+    console.error(`api: unhandled error on ${req.method} ${req.path}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    res.status(status).json({ error: "internal_error" });
+    return;
+  }
+  const code = typeof e.type === "string" ? PARSER_ERRORS[e.type] : undefined;
+  res.status(status).json({ error: code ?? "bad_request" });
+};
