@@ -120,6 +120,15 @@ export class RelayUpstream {
   }
 }
 
+/**
+ * The "referrer" Confluence puts on every Relay quote: RELAY_REFERRER, or the host of the
+ * first CORS origin. Relay returns it on GET /requests/v3 only to us (includeAuthenticatedData),
+ * which is how a registered request is proven to be ours (confluence:relay-ownership).
+ */
+export function relayReferrer(config: { RELAY_REFERRER?: string | undefined; CORS_ORIGINS: readonly string[] }): string {
+  return config.RELAY_REFERRER ?? new URL(config.CORS_ORIGINS[0]!).hostname;
+}
+
 /** The Relay client for this environment: mainnet or testnet API unless RELAY_API_URL overrides it. */
 export function relayUpstreamFor(config: { RELAY_API_URL?: string | undefined; RELAY_API_KEY?: string | undefined; CONFLUENCE_ENV: string }) {
   return new RelayUpstream({

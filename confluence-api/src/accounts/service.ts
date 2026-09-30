@@ -139,7 +139,11 @@ export async function history(db: Db, address: string, opts: { page: number; pag
   const swapOwner = sql`lower(${swaps.sender}) = ${address}`;
   const [{ n: nT } = { n: 0 }] = await db.select({ n: count() }).from(transfers).where(owner);
   const [{ n: nS } = { n: 0 }] = await db.select({ n: count() }).from(swaps).where(swapOwner);
-  const [{ n: nR } = { n: 0 }] = await db.select({ n: count() }).from(relayRequests).where(eq(relayRequests.userAddress, address));
+  // Relay requests appear once Relay's record proves they are ours (confluence:relay-ownership).
+  const [{ n: nR } = { n: 0 }] = await db
+    .select({ n: count() })
+    .from(relayRequests)
+    .where(and(eq(relayRequests.userAddress, address), isNotNull(relayRequests.verifiedAt)));
   const total = Number(nT) + Number(nS) + Number(nR);
   const pageRefs = (await db.all(
     sql`select 'bridge' as kind, id, created_at as at from transfers
@@ -147,7 +151,7 @@ export async function history(db: Db, address: string, opts: { page: number; pag
         union all
         select 'swap' as kind, id, created_at as at from swaps where lower(sender) = ${address}
         union all
-        select 'relay' as kind, request_id as id, created_at as at from relay_requests where user_address = ${address}
+        select 'relay' as kind, request_id as id, created_at as at from relay_requests where user_address = ${address} and verified_at is not null
         order by at desc, id desc limit ${lim} offset ${offset}`,
   )) as { kind: string; id: string }[];
   const tIds = pageRefs.filter((r) => r.kind === "bridge").map((r) => r.id);

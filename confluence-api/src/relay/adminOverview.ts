@@ -24,18 +24,18 @@ export async function relayOverview(db: Db, upstream: RelayUpstream, recipient: 
              sum(case when status = 'success' then cast(amount_in_usd as real) else 0 end) as volume,
              sum(case when status = 'success' then cast(app_fee_quoted_usd as real) else 0 end) as quoted,
              sum(case when status = 'success' then cast(app_fee_paid_usd as real) else 0 end) as paid
-      from relay_requests where created_at >= ${since}`)) as Record<string, unknown>[];
+      from relay_requests where created_at >= ${since} and verified_at is not null`)) as Record<string, unknown>[];
     out[k] = { requests: num(r?.requests), success: num(r?.success), volumeUsd: num(r?.volume), appFeeQuotedUsd: num(r?.quoted), appFeePaidUsd: num(r?.paid) };
   }
   const byStatus = Object.fromEntries(
-    ((await db.all(sql`select status, count(*) as n from relay_requests group by status`)) as { status: string; n: unknown }[]).map((r) => [r.status, num(r.n)]),
+    ((await db.all(sql`select status, count(*) as n from relay_requests where verified_at is not null group by status`)) as { status: string; n: unknown }[]).map((r) => [r.status, num(r.n)]),
   );
   // A fee was set and the route succeeded, but Relay's record shows nothing paid.
   const uncollected = (await db.all(sql`
     select request_id as requestId, symbol_in as symbolIn, symbol_out as symbolOut, origin_chain_name as origin, destination_chain_name as destination,
            app_fee_bps as bps, app_fee_quoted_usd as quotedUsd, created_at as createdAt
     from relay_requests
-    where status = 'success' and enriched_at is not null and app_fee_bps > 0 and coalesce(cast(app_fee_paid_usd as real), 0) = 0
+    where status = 'success' and verified_at is not null and enriched_at is not null and app_fee_bps > 0 and coalesce(cast(app_fee_paid_usd as real), 0) = 0
     order by created_at desc limit 20`)) as Record<string, unknown>[];
   const recent = await db.select().from(relayRequests).orderBy(desc(relayRequests.createdAt)).limit(20);
 

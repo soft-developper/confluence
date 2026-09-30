@@ -28,4 +28,7 @@ console.log(
     ? `[${config.CONFLUENCE_ENV}] relay: ${rl.candidates} waiting requests over 24h old, not checked (RELAY_API_KEY not set)`
     : `[${config.CONFLUENCE_ENV}] relay: ${rl.candidates} waiting requests over 24h old; Relay confirmed ${rl.pruned} still waiting (${dryRun ? "would delete" : "deleted"}), ${rl.movedOn} moved on (${dryRun ? "would update" : "updated"}, kept), ${rl.unknown} no answer (kept)`,
 );
+console.log(
+  `[${config.CONFLUENCE_ENV}] relay: ${rl.unproven} requests never proven to be Confluence's after 7 days of checks (${dryRun ? "would delete" : "deleted"})`,
+);
 db.$client.close();

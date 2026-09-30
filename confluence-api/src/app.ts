@@ -14,7 +14,7 @@ import { siteRouter } from "./routes/site.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminDataRouter } from "./routes/adminData.js";
 import { relayRouter } from "./routes/relay.js";
-import { relayUpstreamFor, type RelayUpstream } from "./relay/upstream.js";
+import { relayUpstreamFor, type RelayUpstream, relayReferrer } from "./relay/upstream.js";
 import { maintenanceGuard } from "./site/maintenance.js";
 import { createEmailSender } from "./email/resend.js";
 import { buildSwapRegistry, type SwapRegistry } from "./swaps/tokens.js";
@@ -80,7 +80,7 @@ export function createApp(
   app.use(siteRouter(db));
   // Relay attribution uses the public app's domain (https://docs.relay.link/references/relay-kit/sdk/createClient),
   // never the admin site's: ADMIN_WEB_ORIGIN now points at the separate admin dashboard.
-  app.use(relayRouter(db, registry, relayUpstream, config.RELAY_REFERRER ?? new URL(config.CORS_ORIGINS[0]!).hostname, config.RELAY_API_KEY));
+  app.use(relayRouter(db, registry, relayUpstream, relayReferrer(config), config.RELAY_API_KEY));
   const adminDeps = {
     db,
     secretKey: config.ADMIN_SECRET_KEY,

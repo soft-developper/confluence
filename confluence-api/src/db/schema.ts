@@ -387,6 +387,11 @@ export const relayRequests = sqliteTable(
     amountInUsd: text("amount_in_usd"),
     appFeePaidUsd: text("app_fee_paid_usd"),
     enrichedAt: integer("enriched_at", { mode: "timestamp_ms" }),
+    // Ownership (confluence:relay-ownership): the browser's registration is unsigned, so a
+    // row counts only once Relay's own record shows our referrer and the same user.
+    // verified_at: when that was confirmed. ownership_checked_at: last time we asked Relay.
+    verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
+    ownershipCheckedAt: integer("ownership_checked_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },

@@ -1,8 +1,8 @@
-import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { quotes, relayRequests, siteSettings, swapEvents, swaps, transferEvents, transfers } from "../db/schema.js";
 import type { RelayUpstream } from "../relay/upstream.js";
-import { applyStatus } from "../relay/status.js";
+import { applyStatus, OWNERSHIP_GIVE_UP_MS } from "../relay/status.js";
 
 /**
  * Housekeeping: delete failed bridges and swaps that never reached the chain, 24 hours
@@ -35,6 +35,11 @@ import { applyStatus } from "../relay/status.js";
  * reached, or doesn't answer with a status, the row is kept and checked on a later run.
  * Confluence never uses Relay deposit addresses, so a waiting requestId is never filled
  * under a different id.
+ *
+ * Unproven Relay rows (confluence:relay-ownership): a row Relay's record never showed to be
+ * ours (no verified_at) is deleted once it is over 7 days old AND the ownership check has
+ * still been asking Relay after that 7-day mark. Rows Relay shows as someone else's are
+ * deleted by the ownership check itself.
  */
 export const PRUNE_AFTER_MS = 24 * 60 * 60_000;
 export const PRUNE_BATCH = 200;
@@ -76,6 +81,8 @@ export interface RelayPruneResult {
   unknown: number;
   /** True when Relay isn't configured, so nothing was checked or deleted. */
   skipped: boolean;
+  /** Rows never proven to be ours after 7 days of asking Relay: deleted (or would be). */
+  unproven: number;
 }
 
 function stuckRelay(cutoff: Date) {
@@ -93,8 +100,27 @@ async function relayStatusOf(upstream: RelayUpstream, requestId: string): Promis
   }
 }
 
+function unprovenRelay(now: number) {
+  return and(
+    isNull(relayRequests.verifiedAt),
+    lt(relayRequests.createdAt, new Date(now - OWNERSHIP_GIVE_UP_MS)),
+    isNotNull(relayRequests.ownershipCheckedAt),
+    sql`${relayRequests.ownershipCheckedAt} - ${relayRequests.createdAt} > ${OWNERSHIP_GIVE_UP_MS}`,
+  );
+}
+
+async function pruneUnprovenRelay(db: Db, now: number, dryRun: boolean): Promise<number> {
+  if (dryRun) {
+    const [c] = await db.select({ n: sql<number>`count(*)` }).from(relayRequests).where(unprovenRelay(now));
+    return Number(c?.n ?? 0);
+  }
+  const del = await db.delete(relayRequests).where(unprovenRelay(now)).returning({ requestId: relayRequests.requestId });
+  return del.length;
+}
+
 async function pruneRelay(db: Db, upstream: RelayUpstream | undefined, cutoff: Date, dryRun: boolean): Promise<RelayPruneResult> {
-  const out: RelayPruneResult = { candidates: 0, pruned: 0, movedOn: 0, unknown: 0, skipped: false };
+  const out: RelayPruneResult = { candidates: 0, pruned: 0, movedOn: 0, unknown: 0, skipped: false, unproven: 0 };
+  out.unproven = await pruneUnprovenRelay(db, cutoff.getTime() + PRUNE_AFTER_MS, dryRun);
   const [c] = await db.select({ n: sql<number>`count(*)` }).from(relayRequests).where(stuckRelay(cutoff));
   out.candidates = Number(c?.n ?? 0);
   if (out.candidates === 0) return out;
@@ -165,7 +191,7 @@ export async function pruneFailed(
     quotes: 0,
     events: 0,
     unusedQuotes: 0,
-    relay: { candidates: 0, pruned: 0, movedOn: 0, unknown: 0, skipped: false },
+    relay: { candidates: 0, pruned: 0, movedOn: 0, unknown: 0, skipped: false, unproven: 0 },
     dryRun: !!opts.dryRun,
   };
   const quoteCutoff = new Date(now - UNUSED_QUOTE_GRACE_MS);
@@ -246,6 +272,7 @@ export async function pruneFailed(
 
   if (out.transfers || out.swaps) log(`housekeeping: pruned ${out.transfers} failed transfers, ${out.swaps} failed swaps (${out.events} events, ${out.quotes} quotes)`);
   if (out.unusedQuotes) log(`housekeeping: removed ${out.unusedQuotes} unused expired quotes`);
+  if (out.relay.unproven) log(`housekeeping: removed ${out.relay.unproven} Relay requests never proven to be Confluence's (7 days)`);
   if (out.relay.pruned || out.relay.movedOn) log(`housekeeping: removed ${out.relay.pruned} Relay requests that never deposited, moved ${out.relay.movedOn} forward`);
   if (out.relay.skipped) log(`housekeeping: ${out.relay.candidates} waiting Relay requests not checked (Relay not configured)`);
   await recordRun(db, out, now);
@@ -260,12 +287,12 @@ async function recordRun(db: Db, r: PruneResult, now: number) {
   const prev = await getHousekeeping(db);
   const value = {
     lastRunAt: new Date(now).toISOString(),
-    lastRun: { transfers: r.transfers, swaps: r.swaps, unusedQuotes: r.unusedQuotes, relay: r.relay.pruned },
+    lastRun: { transfers: r.transfers, swaps: r.swaps, unusedQuotes: r.unusedQuotes, relay: r.relay.pruned + r.relay.unproven },
     totalPruned: {
       transfers: prev.totalPruned.transfers + r.transfers,
       swaps: prev.totalPruned.swaps + r.swaps,
       unusedQuotes: prev.totalPruned.unusedQuotes + r.unusedQuotes,
-      relay: prev.totalPruned.relay + r.relay.pruned,
+      relay: prev.totalPruned.relay + r.relay.pruned + r.relay.unproven,
     },
   };
   await db

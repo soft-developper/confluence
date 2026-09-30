@@ -7,7 +7,7 @@ import { startIdempotencySweeper } from "./middleware/idempotency.js";
 import { IRIS_BASE_URL, IrisClient, IrisMessagesClient } from "./circle/iris.js";
 import { startTracker } from "./tracker/tracker.js";
 import { startHousekeeping } from "./housekeeping/pruneFailed.js";
-import { relayUpstreamFor } from "./relay/upstream.js";
+import { relayUpstreamFor, relayReferrer } from "./relay/upstream.js";
 import { startRelayReconciler } from "./relay/status.js";
 import { TokenBucket } from "./lib/tokenBucket.js";
 
@@ -65,7 +65,7 @@ if (config.TRACKER_ENABLED) {
 }
 
 if (relayUpstream.configured) {
-  startRelayReconciler(db, relayUpstream);
+  startRelayReconciler(db, relayUpstream, relayReferrer(config));
   console.log("relay: backup status check on, every 2 min");
 }
 
