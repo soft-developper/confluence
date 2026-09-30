@@ -335,18 +335,21 @@ export function BridgeCard() {
       },
     };
 
+  // Chain boxes (confluence:mobile-chain-cards). overflow-hidden and block-level, full-width
+  // text lines make the "..." cut-off work in iOS Safari too (it let the lines spill past the
+  // box). Below 400px wide the boxes stack, so chain names are never cut short on phones.
   const chainCard = (label: string, c: BridgeChain | undefined, side: "source" | "destination", onClick: () => void, sub?: string) => (
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-0 flex-1 basis-0 flex-col gap-1.5 rounded-md border border-border-control bg-bg p-3 text-left hover:border-action-text"
+      className="flex w-full min-w-0 flex-col gap-1.5 overflow-hidden rounded-md border border-border-control bg-bg p-3 text-left hover:border-action-text min-[400px]:w-auto min-[400px]:flex-1 min-[400px]:basis-0"
     >
-      <span className="text-xs text-ink-muted">{label}</span>
-      <span className="flex min-w-0 items-center gap-2">
+      <span className="block text-xs text-ink-muted">{label}</span>
+      <span className="flex w-full min-w-0 items-center gap-2">
         {c ? <ChainDot name={c.name} side={side} /> : null}
-        <span className={`truncate text-base font-medium ${side === "source" ? "text-source-text" : "text-destination-text"}`}>{c?.name ?? "Select"}</span>
+        <span className={`min-w-0 truncate text-base font-medium ${side === "source" ? "text-source-text" : "text-destination-text"}`}>{c?.name ?? "Select"}</span>
       </span>
-      {sub ? <span className="tnum truncate font-mono text-xs text-ink-muted">{sub}</span> : null}
+      {sub ? <span className="tnum block w-full max-w-full truncate font-mono text-xs text-ink-muted">{sub}</span> : null}
     </button>
   );
 
@@ -394,7 +397,7 @@ export function BridgeCard() {
         <span className="font-mono text-xs text-ink-muted">Powered by Circle CCTP</span>
       </div>
 
-      <div className="flex items-stretch gap-2">
+      <div className="flex flex-col items-stretch gap-2 min-[400px]:flex-row">
         {chainCard("From", from, "source", () => setPicker("from"), balanceText)}
         <button
           type="button"
