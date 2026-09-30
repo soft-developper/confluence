@@ -76,6 +76,10 @@ export const transfers = sqliteTable(
     reportTokenHash: text("report_token_hash"),
     // Last time the Stage 4 tracker checked this row (Circle and the chain). Null = never.
     trackedAt: integer("tracked_at", { mode: "timestamp_ms" }),
+    // When the tracker first matched Circle's message to this transfer, field by field
+    // (confluence:verified-transfers). Null = not verified by Circle's data yet. Only
+    // verified transfers appear in history and count in analytics.
+    verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
   },
@@ -87,6 +91,7 @@ export const transfers = sqliteTable(
     index("transfers_state_idx").on(t.state),
     index("transfers_sender_idx").on(t.sender),
     index("transfers_tracked_at_idx").on(t.trackedAt),
+    index("transfers_state_verified_idx").on(t.state, t.verifiedAt),
   ],
 );
 

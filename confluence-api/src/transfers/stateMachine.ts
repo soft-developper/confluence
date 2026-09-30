@@ -5,9 +5,11 @@ import type { TransferState } from "../db/schema.js";
  * Step names come from @circle-fin/provider-cctp-v2 (CCTPv2StepName):
  * approve, burn, fetchAttestation, mint, reAttest.
  *
- * Client reports are unverified claims. The Stage 4 tracker confirms them on-chain,
- * so a reported burn moves to BURN_SUBMITTED (not BURN_CONFIRMED) and a reported
- * mint is still re-checked later.
+ * Client reports are unverified claims (confluence:verified-transfers). They can only
+ * move a transfer to "submitted" or "pending" states: a reported burn moves to
+ * BURN_SUBMITTED, a reported attestation to ATTESTATION_PENDING and a reported mint to
+ * MINT_SUBMITTED. ATTESTED and COMPLETED are set only by the tracker, from Circle's
+ * message and the destination chain. Steps that follow a burn need a known burn hash.
  */
 export const STEP_NAMES = ["approve", "burn", "fetchAttestation", "mint", "reAttest"] as const;
 export type StepName = (typeof STEP_NAMES)[number];
@@ -30,9 +32,9 @@ const RANK: Partial<Record<TransferState, number>> = {
 const SUCCESS_TARGET: Record<StepName, TransferState> = {
   approve: "APPROVED",
   burn: "BURN_SUBMITTED",
-  fetchAttestation: "ATTESTED",
-  reAttest: "ATTESTED",
-  mint: "COMPLETED",
+  fetchAttestation: "ATTESTATION_PENDING",
+  reAttest: "ATTESTATION_PENDING",
+  mint: "MINT_SUBMITTED",
 };
 
 /** Steps that only happen after USDC has been burned on the source chain. */
@@ -59,8 +61,11 @@ export function nextState({ current, hasBurnTx, step, state }: TransitionInput):
   // already covered the amount, which is the same outcome as a successful approve.
   if (state === "noop" && step !== "approve") return { kind: "stay", reason: "no_state_change" };
 
+  // Without a reported burn hash, nothing after the burn can be claimed.
+  if (AFTER_BURN.has(step) && !hasBurnTx) return { kind: "stay", reason: "not_forward" };
+
   if (state === "error") {
-    const burned = hasBurnTx || AFTER_BURN.has(step) || (RANK[current] ?? 0) >= (RANK.BURN_SUBMITTED ?? 2);
+    const burned = hasBurnTx || (RANK[current] ?? 0) >= (RANK.BURN_SUBMITTED ?? 2);
     const to: TransferState = burned ? "RECOVERY_REQUIRED" : "FAILED";
     // Once funds are burned, a later error must not downgrade to FAILED.
     if (current === "RECOVERY_REQUIRED" && to === "FAILED") return { kind: "stay", reason: "not_forward" };

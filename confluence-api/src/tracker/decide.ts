@@ -15,6 +15,12 @@ import type { TransferState, TransferSpeed } from "../db/schema.js";
  *   destination already received the message (someone minted) -> COMPLETED.
  * - Forwarding off: destination received the message -> COMPLETED.
  * - Attestation complete -> ATTESTED (if not already past it).
+ * - A COMPLETED transfer never matched to Circle's message (completed by a browser report
+ *   before these rules, confluence:verified-transfers) is checked once: a match only sets
+ *   verified_at (done by the tracker), a mismatch -> RECOVERY_REQUIRED "burn_mismatch",
+ *   and no message -> stays COMPLETED with error code "unverified" (kept, hidden).
+ * - A reported mint (MINT_SUBMITTED) gets 10 minutes before a failed forward is flagged,
+ *   so the destination check can catch up with the user's own mint.
  */
 export interface TrackedRow {
   state: TransferState;
@@ -25,6 +31,7 @@ export interface TrackedRow {
   burnTxHash: string | null;
   mintTxHash: string | null;
   errorCode: string | null;
+  verifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,9 +41,11 @@ export type Decision =
   | { kind: "move"; to: TransferState; mintTxHash?: string; errorCode?: string | null; reason: string; mismatches?: string[] };
 
 export const ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
+/** How long a reported mint is trusted before a failed forward is flagged again. */
+export const REPORTED_MINT_GRACE_MS = 10 * 60 * 1000;
 export const NOT_FOUND_AFTER_MS = 24 * 60 * 60 * 1000;
 /** Rows with these error codes are no longer tracked (nothing more the tracker can learn). */
-export const STOP_CODES = ["burn_mismatch", "burn_not_found", "abandoned"] as const;
+export const STOP_CODES = ["burn_mismatch", "burn_not_found", "abandoned", "unverified"] as const;
 
 const RANK: Partial<Record<TransferState, number>> = {
   CREATED: 0,
@@ -86,6 +95,7 @@ export interface DecideInput {
 }
 
 export function decide({ row, src, dst, message, nonceUsed, now }: DecideInput): Decision {
+  if (row.state === "COMPLETED" && !row.verifiedAt && row.burnTxHash) return verifyCompleted(row, src, dst, message);
   if (row.state === "COMPLETED" || row.state === "FAILED") return { kind: "none", reason: "final" };
   const rank = RANK[row.state] ?? -1;
 
@@ -119,6 +129,9 @@ export function decide({ row, src, dst, message, nonceUsed, now }: DecideInput):
     }
     if (fs === "FAILED") {
       if (nonceUsed === true) return { kind: "move", to: "COMPLETED", errorCode: null, reason: "forward failed but the destination received the message" };
+      if (row.state === "MINT_SUBMITTED" && now - row.updatedAt.getTime() < REPORTED_MINT_GRACE_MS) {
+        return { kind: "none", reason: "forward failed, a mint was reported, waiting for the destination" };
+      }
       if (row.state === "RECOVERY_REQUIRED" && row.errorCode === "forward_failed") return { kind: "none", reason: "forward failed, waiting for a mint" };
       return { kind: "move", to: "RECOVERY_REQUIRED", errorCode: "forward_failed", reason: "Circle reports the forwarded mint failed" };
     }
@@ -133,6 +146,21 @@ export function decide({ row, src, dst, message, nonceUsed, now }: DecideInput):
     return { kind: "move", to: "ATTESTED", errorCode: null, reason: "Circle attestation complete" };
   }
   return { kind: "none", reason: attested ? "attested, waiting for the mint" : `attestation ${message.status}` };
+}
+
+/** One-time check of a COMPLETED transfer that was never matched to Circle's message. */
+function verifyCompleted(row: TrackedRow, src: BridgeChain, dst: BridgeChain, message: IrisMessage | null | undefined): Decision {
+  if (message === undefined) return { kind: "none", reason: "not checked" };
+  if (message === null) {
+    // Kept (never deleted, never shown): Circle has no message for the reported burn.
+    return { kind: "move", to: "COMPLETED", errorCode: "unverified", reason: "Circle has no message for the reported burn" };
+  }
+  const mismatches = verifyMessage(message, row, src, dst);
+  if (mismatches === null) return { kind: "none", reason: "message not decoded yet" };
+  if (mismatches.length > 0) {
+    return { kind: "move", to: "RECOVERY_REQUIRED", errorCode: "burn_mismatch", reason: "reported burn does not match the transfer", mismatches };
+  }
+  return { kind: "none", reason: "verified against Circle's message" };
 }
 
 /** How often a row is re-checked, by age. Young transfers move fast; old ones rarely change. */

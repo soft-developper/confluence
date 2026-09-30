@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { quotes, relayRequests, siteSettings, swapEvents, swaps, transferEvents, transfers } from "../db/schema.js";
 import type { RelayUpstream } from "../relay/upstream.js";
@@ -13,6 +13,11 @@ import { applyStatus } from "../relay/status.js";
  *       bridges: no burn and no mint transaction
  *       swaps:   no swap and no approval transaction
  *   - it became FAILED more than 24 hours ago (updated_at is set when the state changes)
+ * Bridges whose reported burn Circle never saw are treated the same way
+ * (confluence:verified-transfers): state RECOVERY_REQUIRED with error code
+ * "burn_not_found" (the tracker sets it after 24 hours without a Circle message), never
+ * verified against Circle, and unchanged for 24 hours. A reported hash alone is not
+ * proof that anything reached the chain.
  * Its events (and, for a bridge, its single-use quote) are deleted with it, in one
  * database batch per group, and every delete re-checks the same conditions, so a record
  * that changed meanwhile is left alone.
@@ -135,7 +140,13 @@ function prunableQuotes(cutoff: Date) {
 }
 
 function prunableTransfers(cutoff: Date) {
-  return and(eq(transfers.state, "FAILED"), isNull(transfers.burnTxHash), isNull(transfers.mintTxHash), lt(transfers.updatedAt, cutoff));
+  return and(
+    or(
+      and(eq(transfers.state, "FAILED"), isNull(transfers.burnTxHash), isNull(transfers.mintTxHash)),
+      and(eq(transfers.state, "RECOVERY_REQUIRED"), eq(transfers.errorCode, "burn_not_found"), isNull(transfers.verifiedAt)),
+    ),
+    lt(transfers.updatedAt, cutoff),
+  );
 }
 function prunableSwaps(cutoff: Date) {
   return and(eq(swaps.state, "FAILED"), isNull(swaps.swapTxHash), isNull(swaps.approvalTxHash), lt(swaps.updatedAt, cutoff));

@@ -1,10 +1,10 @@
-import { and, asc, eq, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import type { ChainRegistry } from "../chains/registry.js";
 import type { IrisMessagesClient } from "../circle/iris.js";
 import type { Db } from "../db/client.js";
 import { transferEvents, transfers } from "../db/schema.js";
 import { isNonceUsed } from "./chainReads.js";
-import { decide, recheckAfterMs, STOP_CODES, type Decision } from "./decide.js";
+import { decide, recheckAfterMs, STOP_CODES, verifyMessage, type Decision } from "./decide.js";
 import { trackSwapsOnce, type SwapStatusFn } from "./swaps.js";
 
 export interface TrackerDeps {
@@ -27,6 +27,18 @@ export interface PassResult {
 const CANDIDATES = 60; // rows read per pass
 const MAX_PER_PASS = 20; // rows checked per pass (each may cost one Circle call and one RPC call)
 
+/** States the tracker still works on (listed, so the state index is used). */
+const ACTIVE_STATES = [
+  "CREATED",
+  "APPROVED",
+  "BURN_SUBMITTED",
+  "BURN_CONFIRMED",
+  "ATTESTATION_PENDING",
+  "ATTESTED",
+  "MINT_SUBMITTED",
+  "RECOVERY_REQUIRED",
+] as const;
+
 /** One tracking pass. Safe to run concurrently with client reports (conditional updates). */
 export async function trackOnce(deps: TrackerDeps, now = Date.now()): Promise<PassResult> {
   const { db, registry, messages } = deps;
@@ -35,9 +47,10 @@ export async function trackOnce(deps: TrackerDeps, now = Date.now()): Promise<Pa
     .select()
     .from(transfers)
     .where(
-      and(
-        notInArray(transfers.state, ["COMPLETED", "FAILED"]),
-        or(isNull(transfers.errorCode), notInArray(transfers.errorCode, [...STOP_CODES])),
+      or(
+        and(inArray(transfers.state, [...ACTIVE_STATES]), or(isNull(transfers.errorCode), notInArray(transfers.errorCode, [...STOP_CODES]))),
+        // Completed before verification existed (or by a browser report): checked once.
+        and(eq(transfers.state, "COMPLETED"), isNull(transfers.verifiedAt), isNotNull(transfers.burnTxHash), isNull(transfers.errorCode)),
       ),
     )
     .orderBy(sql`${transfers.trackedAt} IS NOT NULL`, asc(transfers.trackedAt))
@@ -55,6 +68,7 @@ export async function trackOnce(deps: TrackerDeps, now = Date.now()): Promise<Pa
     try {
       let decision: Decision;
       let irisSummary: Record<string, unknown> = {};
+      let verifiedNow = false; // Circle's message matched this transfer field by field
       if (!src || !dst) {
         decision = { kind: "none", reason: "chain no longer in the registry" };
       } else {
@@ -76,17 +90,24 @@ export async function trackOnce(deps: TrackerDeps, now = Date.now()): Promise<Pa
             log(`tracker: ${r.id.slice(0, 8)} destination check failed: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
+        verifiedNow = !r.verifiedAt && !!message && verifyMessage(message, r, src, dst)?.length === 0;
         decision = decide({ row: r, src, dst, message, nonceUsed, now });
       }
 
       if (decision.kind === "none") {
-        await db.update(transfers).set({ trackedAt: new Date(now) }).where(eq(transfers.id, r.id));
+        await db
+          .update(transfers)
+          .set({ trackedAt: new Date(now), ...(verifiedNow ? { verifiedAt: new Date(now) } : {}) })
+          .where(eq(transfers.id, r.id));
+        if (verifiedNow) log(`tracker: ${r.id.slice(0, 8)} verified against Circle's message (${r.state})`);
         continue;
       }
 
       const patch: Partial<typeof transfers.$inferInsert> = { state: decision.to, trackedAt: new Date(now), updatedAt: new Date(now) };
       if (decision.errorCode !== undefined) patch.errorCode = decision.errorCode;
-      if (decision.mintTxHash && !r.mintTxHash) patch.mintTxHash = decision.mintTxHash;
+      if (verifiedNow) patch.verifiedAt = new Date(now);
+      // Circle's forwarded mint hash is authoritative over a browser-reported one.
+      if (decision.mintTxHash) patch.mintTxHash = decision.mintTxHash;
       const detail = {
         actor: "tracker",
         reason: decision.reason,

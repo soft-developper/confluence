@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, or, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { formatUnits, getAddress, isAddress } from "viem";
 import type { Db } from "../db/client.js";
 import { accounts, addressBookEntries, relayRequests, swaps, transfers } from "../db/schema.js";
@@ -129,8 +129,13 @@ export async function history(db: Db, address: string, opts: { page: number; pag
   const lim = Math.min(Math.max(opts.pageSize ?? HISTORY_PAGE_SIZE, 1), 50);
   const pageNo = Math.max(1, Math.floor(opts.page));
   const offset = (pageNo - 1) * lim;
-  // Outgoing (this wallet sent) and incoming (this wallet was paid).
-  const owner = or(sql`lower(${transfers.sender}) = ${address}`, sql`lower(${transfers.recipient}) = ${address}`)!;
+  // Outgoing (this wallet sent) and incoming (this wallet was paid). Bridges appear only once
+  // the tracker matched Circle's message to them (confluence:verified-transfers): sender and
+  // recipient come from an unsigned request, so an unverified row proves nothing about either.
+  const owner = and(
+    or(sql`lower(${transfers.sender}) = ${address}`, sql`lower(${transfers.recipient}) = ${address}`),
+    isNotNull(transfers.verifiedAt),
+  )!;
   const swapOwner = sql`lower(${swaps.sender}) = ${address}`;
   const [{ n: nT } = { n: 0 }] = await db.select({ n: count() }).from(transfers).where(owner);
   const [{ n: nS } = { n: 0 }] = await db.select({ n: count() }).from(swaps).where(swapOwner);
@@ -138,7 +143,7 @@ export async function history(db: Db, address: string, opts: { page: number; pag
   const total = Number(nT) + Number(nS) + Number(nR);
   const pageRefs = (await db.all(
     sql`select 'bridge' as kind, id, created_at as at from transfers
-          where lower(sender) = ${address} or lower(recipient) = ${address}
+          where (lower(sender) = ${address} or lower(recipient) = ${address}) and verified_at is not null
         union all
         select 'swap' as kind, id, created_at as at from swaps where lower(sender) = ${address}
         union all

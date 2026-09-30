@@ -37,11 +37,11 @@ export async function overview(db: Db, range: Range) {
   const [b] = await all(
     db,
     sql`select count(*) as total,
-          sum(case when state = 'COMPLETED' then 1 else 0 end) as completed,
+          sum(case when state = 'COMPLETED' and verified_at is not null then 1 else 0 end) as completed,
           sum(case when state = 'FAILED' then 1 else 0 end) as failed,
           sum(case when state = 'RECOVERY_REQUIRED' then 1 else 0 end) as recovery,
-          sum(case when state = 'COMPLETED' then cast(amount_base as integer) else 0 end) as volume,
-          sum(case when state = 'COMPLETED' then cast(platform_fee_base as integer) else 0 end) as fees
+          sum(case when state = 'COMPLETED' and verified_at is not null then cast(amount_base as integer) else 0 end) as volume,
+          sum(case when state = 'COMPLETED' and verified_at is not null then cast(platform_fee_base as integer) else 0 end) as fees
         from transfers where created_at >= ${t0}`,
   );
   const [s] = await all(
@@ -97,8 +97,8 @@ export async function timeseries(db: Db, range: Exclude<Range, "all" | "24h">, n
   const b = await all(
     db,
     sql`select date(created_at / 1000, 'unixepoch') as day, count(*) as bridges,
-          sum(case when state = 'COMPLETED' then cast(amount_base as integer) else 0 end) as volume,
-          sum(case when state = 'COMPLETED' then cast(platform_fee_base as integer) else 0 end) as fees
+          sum(case when state = 'COMPLETED' and verified_at is not null then cast(amount_base as integer) else 0 end) as volume,
+          sum(case when state = 'COMPLETED' and verified_at is not null then cast(platform_fee_base as integer) else 0 end) as fees
         from transfers where created_at >= ${t0} group by day`,
   );
   const s = await all(
@@ -133,7 +133,7 @@ export async function routes(db: Db, range: Range) {
   const bridgeRoutes = await all(
     db,
     sql`select source_chain as source, destination_chain as destination, count(*) as count,
-          sum(case when state = 'COMPLETED' then cast(amount_base as integer) else 0 end) as volume
+          sum(case when state = 'COMPLETED' and verified_at is not null then cast(amount_base as integer) else 0 end) as volume
         from transfers where created_at >= ${t0}
         group by source_chain, destination_chain order by count desc limit 10`,
   );
@@ -308,7 +308,7 @@ export async function treasury(db: Db, registry: ChainRegistry, fetchImpl: typeo
       await all(
         db,
         sql`select source_chain as chain, sum(cast(platform_fee_base as integer)) as fees
-            from transfers where state = 'COMPLETED' group by source_chain`,
+            from transfers where state = 'COMPLETED' and verified_at is not null group by source_chain`,
       )
     ).map((r) => [String(r.chain), big(r.fees)]),
   );
