@@ -27,12 +27,35 @@ import { fetchRelayChains, type RelayChain } from "@/lib/relay";
 
 const ID_RULE = /^[a-z0-9_]{3,20}$/;
 
-function Card({ children, title }: { children: React.ReactNode; title?: string }) {
+function Card({ children, title, actions }: { children: React.ReactNode; title?: string; actions?: React.ReactNode }) {
   return (
     <section className="flex w-full max-w-[560px] flex-col gap-4 rounded-lg border border-border bg-surface p-5 sm:p-6">
-      {title && <h2 className="text-lg font-medium">{title}</h2>}
+      {(title || actions) && (
+        <div className="flex items-center justify-between gap-3">
+          {title && <h2 className="text-lg font-medium">{title}</h2>}
+          {actions}
+        </div>
+      )}
       {children}
     </section>
+  );
+}
+
+/**
+ * Reloads one card's data in place, without reloading the page (confluence:refresh-buttons).
+ * Same pattern as the admin "App fee balance at Relay" refresh.
+ */
+function RefreshButton({ onClick, busy, label = "Refresh" }: { onClick: () => void; busy: boolean; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      aria-busy={busy}
+      className="h-8 shrink-0 rounded-md border border-border-control px-3 text-xs font-medium hover:border-action-text disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text"
+    >
+      {busy ? "Refreshing..." : label}
+    </button>
   );
 }
 
@@ -301,7 +324,7 @@ function HistoryCard({ token, address }: { token: string; address: string }) {
   const relayChains = useQuery({ queryKey: ["relay-chains"], queryFn: ({ signal }) => fetchRelayChains(signal), staleTime: 60 * 60_000, enabled: hasRelay, retry: 1 });
 
   return (
-    <Card title="History">
+    <Card title="History" actions={<RefreshButton onClick={() => void q.refetch()} busy={q.isFetching} />}>
       {q.isPending && <p className="text-sm text-ink-muted">Loading...</p>}
       {q.isError && <p className="text-sm text-danger">Could not load your history.</p>}
       {!q.isPending && items.length === 0 && !q.isError && (

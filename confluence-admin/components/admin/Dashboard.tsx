@@ -94,6 +94,9 @@ function OverviewTab() {
   const s = useQuery({ queryKey: ["admin-series", chartRange], queryFn: () => adminFetch<Series>(`/admin/analytics/timeseries?range=${chartRange}`) });
   const r = useQuery({ queryKey: ["admin-routes", range], queryFn: () => adminFetch<Routes>(`/admin/analytics/routes?range=${range}`) });
   const d = o.data;
+  // Reloads every overview panel in place, without reloading the page (confluence:refresh-buttons).
+  const refreshing = o.isFetching || s.isFetching || r.isFetching;
+  const refreshAll = () => void Promise.all([o.refetch(), s.refetch(), r.refetch()]);
   const Seg = <T extends string>({ value, set, options }: { value: T; set: (v: T) => void; options: readonly T[] }) => (
     <div className="flex gap-1" role="radiogroup">
       {options.map((x) => (
@@ -112,6 +115,11 @@ function OverviewTab() {
   );
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Btn kind="secondary" onClick={refreshAll} disabled={refreshing}>
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </Btn>
+      </div>
       <Panel title="Bridge" actions={<Seg value={range} set={setRange} options={["24h", "7d", "30d", "all"] as const} />}>
         {o.isError && <ErrorText>{errText(o.error)}</ErrorText>}
         {d && (
@@ -238,7 +246,15 @@ function ActivityTab() {
   });
   const items = first.data?.items ?? [];
   return (
-    <Panel title="Activity">
+    <Panel
+      title="Activity"
+      actions={
+        // Reloads the current page of results in place (confluence:refresh-buttons).
+        <Btn kind="secondary" onClick={() => void first.refetch()} disabled={first.isFetching}>
+          {first.isFetching ? "Refreshing..." : "Refresh"}
+        </Btn>
+      }
+    >
       <form
         className="flex flex-wrap gap-2"
         onSubmit={(e) => {
