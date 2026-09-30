@@ -55,7 +55,15 @@ export async function verifySignIn(
   // The message must be for one of OUR web origins (anti-phishing: EIP-4361 domain binding).
   const allowed = config.CORS_ORIGINS.map((o) => new URL(o));
   if (!allowed.some((u) => u.host === msg.domain)) throw new AuthError(401, "wrong_domain", "the message was not created for this site");
-  if (!allowed.some((u) => msg.uri!.startsWith(u.origin))) throw new AuthError(401, "wrong_uri", "the message URI is not this site");
+  // Exact origin match (confluence:siwe-exact-uri): a prefix check would also accept
+  // "https://app.example.com.evil.com".
+  let uriOrigin: string;
+  try {
+    uriOrigin = new URL(msg.uri).origin;
+  } catch {
+    throw new AuthError(401, "wrong_uri", "the message URI is not this site");
+  }
+  if (!allowed.some((u) => u.origin === uriOrigin)) throw new AuthError(401, "wrong_uri", "the message URI is not this site");
   if (now.getTime() - msg.issuedAt.getTime() > MAX_MESSAGE_AGE_MS) throw new AuthError(401, "message_expired", "the message is too old; sign in again");
   const chain = registry.chains.find((c) => c.evmChainId === msg.chainId);
   if (!chain) throw new AuthError(400, "unsupported_chain", "sign in from a supported network");

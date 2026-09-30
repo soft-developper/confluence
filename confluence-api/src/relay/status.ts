@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { relayRequests } from "../db/schema.js";
 import type { RelayUpstream } from "./upstream.js";

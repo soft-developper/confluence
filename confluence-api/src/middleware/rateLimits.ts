@@ -13,7 +13,7 @@ function createStore(_limiterName: string): Store | undefined {
 
 const WINDOW_MS = 60_000;
 
-function onLimit(req: Request, res: import("express").Response, _next: unknown, options: { windowMs: number }) {
+function onLimit(_req: Request, res: import("express").Response, _next: unknown, options: { windowMs: number }) {
   res.status(429).json({ error: "rate_limited", retryAfterSeconds: Math.ceil(options.windowMs / 1000) });
 }
 

@@ -10,3 +10,5 @@ next-env.d.ts
 .DS_Store
 .vercel
 .confluence/
+# Backups made by delivery scripts (never committed)
+.script-backups/

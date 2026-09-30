@@ -24,6 +24,9 @@ function ChainsGate({ children }: { children: React.ReactNode }) {
     staleTime: 5 * 60_000,
     retry: 5,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
+    // After the first retries fail, keep trying every 15s so the app recovers on its own
+    // once the API is back (confluence:chains-retry).
+    refetchInterval: (query) => (query.state.status === "error" ? 15_000 : false),
   });
   const config = useMemo(() => (q.data ? getWagmiConfig(q.data.chains) : null), [q.data]);
 
@@ -31,14 +34,16 @@ function ChainsGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6">
         <div role="alert" className="max-w-md rounded-lg border border-danger bg-surface p-6 text-sm">
-          <p className="font-medium text-danger">Could not load supported chains.</p>
-          <p className="mt-2 text-ink-muted">{(q.error as Error).message}</p>
+          <p className="font-medium text-danger">Confluence can&apos;t reach its server right now.</p>
+          <p className="mt-2 text-ink-muted">
+            Your funds are not affected. This page retries automatically every 15 seconds and will load as soon as the connection is back.
+          </p>
           <button
             type="button"
             onClick={() => void q.refetch()}
             className="mt-4 h-10 rounded-md border border-border-control px-4 text-ink hover:border-action-text"
           >
-            Try again
+            {q.isFetching ? "Trying..." : "Try now"}
           </button>
         </div>
       </div>

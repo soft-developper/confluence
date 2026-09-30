@@ -56,7 +56,8 @@ export function idempotency(db: Db, scope: string): RequestHandler {
         });
         if (existing && existing.expiresAt.getTime() <= now) {
           await db.delete(idempotencyKeys).where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
-          return idempotency(db, scope)(req, res, next); // expired: start over once
+          await idempotency(db, scope)(req, res, next); // expired: start over once
+          return;
         }
         if (!existing) {
           res.status(409).json({ error: "idempotency_in_progress" });
