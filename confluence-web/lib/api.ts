@@ -47,6 +47,19 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * fetch with a time limit (confluence:report-outbox). A hung request (for example while the
+ * API wakes up) now fails after the limit instead of leaving a spinner forever. A caller's own
+ * AbortSignal still works alongside the limit.
+ */
+export const API_TIMEOUT_MS = 45_000;
+export function apiFetch(url: string, init: RequestInit = {}, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
+  const limit = AbortSignal.timeout(timeoutMs);
+  const any = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  const signal = init.signal ? (any ? any([init.signal, limit]) : init.signal) : limit;
+  return fetch(url, { ...init, signal });
+}
+
 async function readError(res: Response): Promise<ApiError> {
   let body: { error?: string; message?: string; retryAfterSeconds?: number } = {};
   try {
@@ -58,7 +71,7 @@ async function readError(res: Response): Promise<ApiError> {
 }
 
 export async function postQuote(req: QuoteRequest, signal?: AbortSignal): Promise<Quote> {
-  const res = await fetch(`${publicEnv.apiUrl}/quotes`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}/quotes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
@@ -69,7 +82,7 @@ export async function postQuote(req: QuoteRequest, signal?: AbortSignal): Promis
 }
 
 export async function fetchMaxAmount(balanceBase: bigint, signal?: AbortSignal): Promise<string> {
-  const res = await fetch(`${publicEnv.apiUrl}/fees/max-amount?balance=${balanceBase.toString()}`, { signal });
+  const res = await apiFetch(`${publicEnv.apiUrl}/fees/max-amount?balance=${balanceBase.toString()}`, { signal });
   if (!res.ok) throw await readError(res);
   const data = z.object({ maxAmount: Money }).parse(await res.json());
   return data.maxAmount.usdc;
@@ -128,7 +141,7 @@ export type CreatedTransfer = z.infer<typeof CreatedTransferSchema>;
 
 /** Creates a transfer from a quote. The key makes a retried request safe (same key, same result). */
 export async function postTransfer(input: { quoteId: string; sender: string }, idempotencyKey: string): Promise<CreatedTransfer> {
-  const res = await fetch(`${publicEnv.apiUrl}/transfers`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}/transfers`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(input),
@@ -150,11 +163,11 @@ export interface StepReportBody {
 
 /** Reports one App Kit step to the API. Authenticated by the transfer's report token. */
 export async function postTransferEvent(id: string, token: string, body: StepReportBody): Promise<void> {
-  const res = await fetch(`${publicEnv.apiUrl}/transfers/${encodeURIComponent(id)}/events`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}/transfers/${encodeURIComponent(id)}/events`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Transfer-Token": token },
     body: JSON.stringify(body),
-  });
+  }, 20_000);
   if (!res.ok) throw await readError(res);
 }
 
@@ -218,7 +231,7 @@ export type TransferDetail = z.infer<typeof TransferDetailSchema>;
 
 /** Public read of a transfer. Returns null when it does not exist. */
 export async function fetchTransfer(id: string): Promise<TransferDetail | null> {
-  const res = await fetch(`${publicEnv.apiUrl}/transfers/${encodeURIComponent(id)}`, { cache: "no-store" });
+  const res = await apiFetch(`${publicEnv.apiUrl}/transfers/${encodeURIComponent(id)}`, { cache: "no-store" });
   if (res.status === 404) return null;
   if (!res.ok) throw await readError(res);
   return TransferDetailSchema.parse(await res.json());
@@ -248,7 +261,7 @@ export const SwapChainsSchema = z.object({
 export type SwapChainInfo = z.infer<typeof SwapChainsSchema>["chains"][number];
 
 export async function fetchSwapChains(): Promise<SwapChainInfo[]> {
-  const res = await fetch(`${publicEnv.apiUrl}/swaps/chains`);
+  const res = await apiFetch(`${publicEnv.apiUrl}/swaps/chains`);
   if (!res.ok) throw await readError(res);
   return SwapChainsSchema.parse(await res.json()).chains;
 }
@@ -257,7 +270,7 @@ const FeeResponse = z.object({ token: z.string(), fee: z.string(), rule: z.enum(
 
 /** Backend swap fee for an amount of a fee token (stateless, for estimates). */
 export async function postSwapFee(input: { chain: string; token: SwapTokenSymbol; amount: string }) {
-  const res = await fetch(`${publicEnv.apiUrl}/swaps/fee`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}/swaps/fee`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -292,7 +305,7 @@ export async function postSwap(
   },
   idempotencyKey: string,
 ): Promise<CreatedSwap> {
-  const res = await fetch(`${publicEnv.apiUrl}/swaps`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}/swaps`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(input),
@@ -317,11 +330,11 @@ export type SwapReportBody =
 
 /** Reports one swap step. For the fee step the API answers with our backend fee. */
 export async function postSwapEvent(id: string, token: string, body: SwapReportBody): Promise<{ state: string; fee?: string }> {
-  const res = await fetch(`${publicEnv.apiUrl}/swaps/${encodeURIComponent(id)}/events`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}/swaps/${encodeURIComponent(id)}/events`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Transfer-Token": token },
     body: JSON.stringify(body),
-  });
+  }, 20_000);
   if (!res.ok) throw await readError(res);
   return (await res.json()) as { state: string; fee?: string };
 }
@@ -332,7 +345,7 @@ export async function postSwapEvent(id: string, token: string, body: SwapReportB
 export class SessionExpiredError extends Error {}
 
 async function authed(token: string, path: string, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(`${publicEnv.apiUrl}${path}`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
     cache: "no-store",
@@ -343,13 +356,13 @@ async function authed(token: string, path: string, init: RequestInit = {}): Prom
 }
 
 export async function fetchNonce(): Promise<string> {
-  const res = await fetch(`${publicEnv.apiUrl}/auth/nonce`, { cache: "no-store" });
+  const res = await apiFetch(`${publicEnv.apiUrl}/auth/nonce`, { cache: "no-store" });
   if (!res.ok) throw await readError(res);
   return z.object({ nonce: z.string() }).parse(await res.json()).nonce;
 }
 
 export async function verifySignIn(message: string, signature: string) {
-  const res = await fetch(`${publicEnv.apiUrl}/auth/verify`, {
+  const res = await apiFetch(`${publicEnv.apiUrl}/auth/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, signature }),
@@ -375,7 +388,7 @@ export async function claimConfluenceId(token: string, handle: string): Promise<
 }
 
 export async function checkIdAvailability(handle: string) {
-  const res = await fetch(`${publicEnv.apiUrl}/ids/${encodeURIComponent(handle)}/availability`);
+  const res = await apiFetch(`${publicEnv.apiUrl}/ids/${encodeURIComponent(handle)}/availability`);
   if (!res.ok) throw await readError(res);
   return z.object({ handle: z.string(), available: z.boolean(), reason: z.string().nullable() }).parse(await res.json());
 }
@@ -437,7 +450,7 @@ export async function signOut(token: string, everywhere = false): Promise<void> 
 
 /** Resolves @handle for display only; payments are resolved again by the API. */
 export async function lookupConfluenceId(handle: string): Promise<{ handle: string; address: string } | null> {
-  const res = await fetch(`${publicEnv.apiUrl}/ids/${encodeURIComponent(handle)}`);
+  const res = await apiFetch(`${publicEnv.apiUrl}/ids/${encodeURIComponent(handle)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw await readError(res);
   return z.object({ handle: z.string(), address: z.string() }).parse(await res.json());
@@ -460,7 +473,7 @@ export const FooterSchema = z.object({
 export type FooterContent = z.infer<typeof FooterSchema>["settings"];
 
 export async function fetchFooter(): Promise<FooterContent> {
-  const res = await fetch(`${publicEnv.apiUrl}/site/footer`);
+  const res = await apiFetch(`${publicEnv.apiUrl}/site/footer`);
   if (!res.ok) throw await readError(res);
   return FooterSchema.parse(await res.json()).settings;
 }
@@ -475,7 +488,7 @@ export const SiteStatusSchema = z.object({
 export type SiteStatus = z.infer<typeof SiteStatusSchema>;
 
 export async function fetchSiteStatus(): Promise<SiteStatus> {
-  const res = await fetch(`${publicEnv.apiUrl}/site/status`, { cache: "no-store" });
+  const res = await apiFetch(`${publicEnv.apiUrl}/site/status`, { cache: "no-store" });
   if (!res.ok) throw await readError(res);
   return SiteStatusSchema.parse(await res.json());
 }

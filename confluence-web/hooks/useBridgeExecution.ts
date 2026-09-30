@@ -6,6 +6,7 @@ import type { BridgeChain as KitChain, BridgeResult, BridgeStep, BridgeWarning }
 import { ApiError, postTransfer, postTransferEvent, transferErrorText, type CreatedTransfer, type Quote, type StepReportBody } from "@/lib/api";
 import { loadBridgeKit, type LoadedBridgeKit } from "@/lib/bridgeKit";
 import { saveTransferToken } from "@/lib/transferToken";
+import { enqueueTransferReport } from "@/lib/reportOutbox";
 import { recordRecipient } from "@/lib/addressBook";
 import type { BridgeChain } from "@/lib/chains";
 
@@ -103,7 +104,6 @@ export function useBridgeExecution() {
   const lastResult = useRef<BridgeResult | null>(null);
   const transferRef = useRef<CreatedTransfer | null>(null);
   const reported = useRef(new Set<string>());
-  const reportChain = useRef<Promise<void>>(Promise.resolve());
   const routeRef = useRef<{ to: BridgeChain; forwarded: boolean } | null>(null);
 
   const busy = state.phase === "preparing" || state.phase === "running";
@@ -116,20 +116,23 @@ export function useBridgeExecution() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [busy]);
 
-  /** Sends one step report, in order, once per (step, state). Failures never break the UI. */
+  /**
+   * Sends one step report, once per (step, state). Outcome reports go through the durable
+   * outbox (confluence:report-outbox): kept in this browser until the API accepts them, in
+   * order, so a burn hash is never lost. "pending" reports carry no outcome and go out once,
+   * best effort. Failures never break the UI.
+   */
   const report = useCallback((body: StepReportBody) => {
     const t = transferRef.current;
     if (!t) return;
     const key = `${body.step}:${body.state}`;
-    if (body.state !== "pending") {
-      if (reported.current.has(key)) return;
-      reported.current.add(key);
+    if (body.state === "pending") {
+      postTransferEvent(t.id, t.reportToken, body).catch(() => {});
+      return;
     }
-    reportChain.current = reportChain.current
-      .then(() => postTransferEvent(t.id, t.reportToken, body))
-      .catch((e: unknown) => {
-        console.warn(`confluence: step report ${key} failed:`, e instanceof Error ? e.message : e);
-      });
+    if (reported.current.has(key)) return;
+    reported.current.add(key);
+    void enqueueTransferReport(t.id, body);
   }, []);
 
   /** App Kit's category, or user_rejected when the wallet message says so. */
@@ -258,7 +261,6 @@ export function useBridgeExecution() {
     async (args: StartArgs) => {
       if (busy) return;
       reported.current = new Set();
-      reportChain.current = Promise.resolve();
       lastResult.current = null;
       transferRef.current = null;
       setState({ phase: "preparing", stages: initialStages(), warnings: [] });

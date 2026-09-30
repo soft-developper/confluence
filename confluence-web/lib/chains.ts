@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineChain, type Chain } from "viem";
 import { publicEnv } from "./env";
+import { apiFetch } from "./api";
 
 /**
  * Mirror of confluence-api's BridgeChain (src/chains/registry.ts). The API is the
@@ -32,7 +33,7 @@ const ChainsResponse = z.object({
 export type ChainsResponse = z.infer<typeof ChainsResponse>;
 
 export async function fetchChains(signal?: AbortSignal): Promise<ChainsResponse> {
-  const res = await fetch(`${publicEnv.apiUrl}/chains`, { signal, cache: "no-store" });
+  const res = await apiFetch(`${publicEnv.apiUrl}/chains`, { signal, cache: "no-store" });
   if (!res.ok) throw new Error(`chains request failed (HTTP ${res.status})`);
   const data = ChainsResponse.parse(await res.json());
   if (data.env !== publicEnv.confluenceEnv) {

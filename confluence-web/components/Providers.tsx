@@ -1,10 +1,11 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { fetchChains, type BridgeChain, type ChainsResponse } from "@/lib/chains";
 import { getWagmiConfig } from "@/lib/wagmi";
+import { startReportOutbox } from "@/lib/reportOutbox";
 
 const ChainsContext = createContext<ChainsResponse | null>(null);
 
@@ -59,6 +60,8 @@ function ChainsGate({ children }: { children: React.ReactNode }) {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
+  // Delivers step reports saved from earlier visits (confluence:report-outbox).
+  useEffect(() => startReportOutbox(), []);
   return (
     <QueryClientProvider client={queryClient}>
       <ChainsGate>{children}</ChainsGate>

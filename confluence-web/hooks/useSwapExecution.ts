@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { EIP1193Provider } from "viem";
 import type { SwapResult } from "@circle-fin/app-kit";
 import { ApiError, postSwap, postSwapEvent, type CreatedSwap, type SwapReportBody, type SwapTokenSymbol } from "@/lib/api";
 import type { BridgeChain } from "@/lib/chains";
 import { developerFee, loadSwapKit, withTxCapture } from "@/lib/swapKit";
 import { saveTransferToken } from "@/lib/transferToken";
+import { enqueueSwapReport } from "@/lib/reportOutbox";
 
 export interface SwapRun {
   phase: "idle" | "preparing" | "running" | "success" | "error";
@@ -37,7 +38,6 @@ export interface StartSwapArgs {
 
 export function useSwapExecution() {
   const [run, setRun] = useState<SwapRun>({ phase: "idle" });
-  const chain = useRef<Promise<unknown>>(Promise.resolve());
   const busy = run.phase === "preparing" || run.phase === "running";
 
   useEffect(() => {
@@ -72,13 +72,9 @@ export function useSwapExecution() {
       saveTransferToken(swap.id, swap.reportToken);
       setRun({ phase: "preparing", swap });
 
-      // Reports go out in order; failures never break the swap itself.
-      const report = (body: SwapReportBody) => {
-        chain.current = chain.current
-          .then(() => postSwapEvent(swap.id, swap.reportToken, body))
-          .catch((e: unknown) => console.warn("confluence: swap report failed:", e instanceof Error ? e.message : e));
-        return chain.current;
-      };
+      // Reports go through the durable outbox (confluence:report-outbox): in order, kept in
+      // this browser until the API accepts them. Failures never break the swap itself.
+      const report = (body: SwapReportBody) => enqueueSwapReport(swap.id, body);
 
       try {
         const raw = (await a.getProvider()) as EIP1193Provider | undefined;

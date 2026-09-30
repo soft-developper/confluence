@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { publicEnv } from "./env";
+import { apiFetch } from "./api";
 
 /**
  * Relay (relay.link) data layer for the browser (R2). Every call goes through our API's
@@ -45,7 +46,7 @@ const SettingsSchema = z.object({ enabled: z.boolean(), appFeeBps: z.number() })
 export type RelaySettings = z.infer<typeof SettingsSchema>;
 
 export async function fetchRelaySettings(signal?: AbortSignal): Promise<RelaySettings> {
-  const res = await fetch(`${publicEnv.apiUrl}/relay-settings`, { signal });
+  const res = await apiFetch(`${publicEnv.apiUrl}/relay-settings`, { signal });
   if (!res.ok) throw await readRelayError(res);
   return SettingsSchema.parse(await res.json());
 }
@@ -302,7 +303,7 @@ export interface RegisterRelayRequest {
 /** Records a started Relay request for history and analytics. Best effort: never blocks the user. */
 export async function registerRelayRequest(r: RegisterRelayRequest): Promise<void> {
   try {
-    await fetch(`${publicEnv.apiUrl}/relay-requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) });
+    await apiFetch(`${publicEnv.apiUrl}/relay-requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) });
   } catch {
     // history is best effort; the transfer itself is unaffected
   }
