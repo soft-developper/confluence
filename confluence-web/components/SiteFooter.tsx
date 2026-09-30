@@ -67,9 +67,11 @@ export function SiteFooter() {
   return (
     <footer className="relative mt-auto overflow-hidden border-t border-border bg-surface">
       <Watermark />
-      <div className="relative mx-auto flex w-full max-w-[1100px] flex-col gap-8 px-4 py-10 sm:px-6">
-        <div className="grid gap-8 sm:grid-cols-[1.4fr_1fr_1fr]">
-          <div className="flex flex-col gap-3">
+      {/* Phones (confluence:mobile-spacing): less padding, and the two link lists side by side
+          under the brand block instead of three stacked sections. */}
+      <div className="relative mx-auto flex w-full max-w-[1100px] flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-[1.4fr_1fr_1fr] sm:gap-8">
+          <div className="col-span-2 flex flex-col gap-2 sm:col-span-1 sm:gap-3">
             <span className="text-lg font-medium">Confluence</span>
             <p className="max-w-[320px] text-sm text-ink-muted">USDC across chains, centered on Arc.</p>
             {networkLabel && (
