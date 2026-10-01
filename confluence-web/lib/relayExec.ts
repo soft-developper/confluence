@@ -73,6 +73,18 @@ export async function executeRelay(opts: {
   return out.data;
 }
 
+/**
+ * Switches the wallet to a Relay source chain before review (confluence:relay-switch-chain),
+ * with the same SDK adapter the execution uses: it adds the network to the wallet from
+ * Relay's chain list when the wallet doesn't know it yet.
+ */
+export async function switchWalletToRelayChain(opts: { getProvider: () => Promise<unknown>; account: `0x${string}`; chainId: number }): Promise<void> {
+  await ensureRelayClient();
+  const provider = (await opts.getProvider()) as EIP1193Provider;
+  const wallet = adaptViemWallet(createWalletClient({ account: opts.account, transport: custom(provider) }));
+  if ((await wallet.getChainId()) !== opts.chainId) await wallet.switchChain(opts.chainId);
+}
+
 export function requestIdOf(q: { steps?: { requestId?: string }[] } | null | undefined): string | undefined {
   return q?.steps?.find((s) => s.requestId)?.requestId;
 }

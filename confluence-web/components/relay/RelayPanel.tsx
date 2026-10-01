@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatUnits, parseUnits } from "viem";
 import { useConnection } from "wagmi";
 import type { ProgressData } from "@relayprotocol/relay-sdk";
-import { executeRelay, requestIdOf } from "@/lib/relayExec";
+import { executeRelay, requestIdOf, switchWalletToRelayChain } from "@/lib/relayExec";
 import { ConnectModal } from "@/components/wallet/ConnectModal";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useRelayBalance } from "@/hooks/useRelayBalance";
@@ -81,6 +81,8 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
 
   const [view, setView] = useState<"form" | "review" | "run">("form");
   const [run, setRun] = useState<{ phase: "running" | "success" | "refunded" | "error"; progress: ProgressData | null; error?: string } | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   // Ask before leaving while a Relay route runs: tab close, reload and in-app links (confluence:leave-guard).
   useLeaveGuard(run?.phase === "running");
   const registered = useRef(false);
@@ -161,8 +163,22 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
     setPicker(null);
   }
 
+  // Like the Confluence bridge and swap: when the wallet is on another network, the main button
+  // offers to switch to the route's source network (confluence:relay-switch-chain).
+  const onSourceChain = !!from && walletChainId === from.chainId;
+  const switchToSource = () => {
+    if (!from || !connector || !address) return;
+    setSwitchError(null);
+    setSwitching(true);
+    switchWalletToRelayChain({ getProvider: () => connector.getProvider(), account: address, chainId: from.chainId })
+      .catch((e: unknown) => setSwitchError(relayExecErrorText(e)))
+      .finally(() => setSwitching(false));
+  };
+
   let action: { label: string; onClick?: () => void; disabled?: boolean };
   if (!from || !to) action = { label: chainsQ.isError ? "Relay unavailable" : "Loading...", disabled: true };
+  else if (status === "connected" && !onSourceChain)
+    action = { label: switching ? "Switching..." : `Switch to ${fromChain?.name ?? "the source network"}`, onClick: switchToSource, disabled: switching };
   else if (samePair) action = { label: "Choose two different tokens", disabled: true };
   else if (!cleaned) action = { label: "Enter an amount", disabled: true };
   else if (status === "connected" && insufficient) action = { label: `Insufficient ${from.symbol}`, disabled: true };
@@ -433,6 +449,11 @@ export function RelayPanel({ preset, appFeeBps }: { preset: "bridge" | "swap"; a
       <Primary onClick={action.onClick} disabled={action.disabled}>
         {action.label}
       </Primary>
+      {switchError && !onSourceChain && (
+        <p role="alert" className="text-center text-[13px] text-danger">
+          {switchError}
+        </p>
+      )}
 
       <RelayTokenPicker
         open={picker !== null}
