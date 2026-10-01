@@ -24,10 +24,24 @@ interface Win {
   appFeeQuotedUsd: number;
   appFeePaidUsd: number;
 }
+interface UncollectedWin {
+  count: number;
+  quotedUsd: number;
+  small: number;
+  larger: number;
+  unknown: number;
+}
+interface UncollectedSummary {
+  smallFeeCutoffUsd: number;
+  windows: { d7: UncollectedWin; d30: UncollectedWin; all: UncollectedWin };
+  byRoute: { origin: string | null; destination: string | null; symbolIn: string; symbolOut: string; count: number; quotedUsd: number; maxQuotedUsd: number; lastAt: string }[];
+  larger: { requestId: string; origin: string | null; destination: string | null; symbolIn: string; symbolOut: string; quotedUsd: number; amountInUsd: number | null; createdAt: string }[];
+}
 interface RelayOverview {
   windows: { d1: Win; d7: Win; d30: Win };
   byStatus: Record<string, number>;
-  uncollected: { requestId: string; symbolIn: string; symbolOut: string; origin: string | null; destination: string | null; bps: number; quotedUsd: string | null; createdAt: string }[];
+  // Older API versions sent a short list; the summary replaced it (confluence:uncollected-summary).
+  uncollected: UncollectedSummary | unknown[];
   recent: { requestId: string; user: string; route: string; pair: string; status: string; amountInUsd: string | null; appFeeBps: number; appFeeQuotedUsd: string | null; appFeePaidUsd: string | null; createdAt: string }[];
   balance: { totalBalanceUsd: number | null; availableBalanceUsd: number | null; items: { symbol: string; chainId: number | null; amount: string; amountUsd: string | null }[] } | { error: string } | null;
   claimUrl: string;
@@ -91,17 +105,7 @@ export function RelayTab() {
             All time: {Object.entries(o.data.byStatus).map(([k, v]) => `${k} ${v}`).join(" · ")}
           </p>
         )}
-        {o.data && o.data.uncollected.length > 0 && (
-          <div role="alert" className="flex flex-col gap-1 rounded-md border border-warning bg-bg p-3 text-[13px]">
-            <span className="font-medium">
-              {o.data.uncollected.length} completed request{o.data.uncollected.length === 1 ? "" : "s"} had an app fee set but Relay recorded none paid.
-            </span>
-            <span className="text-ink-muted">
-              Relay&rsquo;s docs note that unsupported routes don&rsquo;t error, they just don&rsquo;t collect (for example small same-chain swaps where the
-              fee is under $0.025). Routes: {o.data.uncollected.slice(0, 5).map((u) => `${u.symbolIn}→${u.symbolOut} (${u.origin ?? "?"} → ${u.destination ?? "?"})`).join(", ")}
-            </span>
-          </div>
-        )}
+        {o.data && !Array.isArray(o.data.uncollected) && o.data.uncollected.windows.all.count > 0 && <Uncollected u={o.data.uncollected} />}
       </Panel>
 
       <Panel title="App fee balance at Relay" actions={<Btn kind="secondary" onClick={() => void o.refetch()} disabled={o.isFetching}>{o.isFetching ? "Reading..." : "Refresh"}</Btn>}>
@@ -251,5 +255,76 @@ function SettingsCard({ data, configured, onSaved }: { data: RelaySettingsRes; c
         </p>
       )}
     </Panel>
+  );
+}
+
+/**
+ * Uncollected app fees, summarized to a fixed size however many accumulate
+ * (confluence:uncollected-summary). Reasons from Relay's docs: https://docs.relay.link/features/app-fees
+ */
+function Uncollected({ u }: { u: UncollectedSummary }) {
+  const a = u.windows.all;
+  const cutoff = money(u.smallFeeCutoffUsd);
+  const route = (r: { origin: string | null; destination: string | null; symbolIn: string; symbolOut: string }) =>
+    `${r.symbolIn} → ${r.symbolOut}, ${r.origin ?? "?"} → ${r.destination ?? "?"}`;
+  return (
+    <div className={`flex flex-col gap-3 rounded-md border bg-bg p-3 text-[13px] ${a.larger > 0 ? "border-warning" : "border-border"}`}>
+      <div className="flex flex-col gap-1">
+        <span className="font-medium">Uncollected app fees</span>
+        <span className="tnum font-mono text-xs text-ink-muted">
+          All time: {a.count} request{a.count === 1 ? "" : "s"}, {money(a.quotedUsd)} quoted ({a.small} small, {a.larger} larger
+          {a.unknown ? `, ${a.unknown} without a quote` : ""}) · Last 30 days: {u.windows.d30.count} · Last 7 days: {u.windows.d7.count}
+        </span>
+        <span className="text-ink-muted">
+          These routes succeeded, but Relay recorded no app fee paid. Relay doesn&rsquo;t report an error when it skips a fee: per its docs, that happens on
+          unsupported transaction types, when the input isn&rsquo;t a currency its solver holds, or when collecting would cost more gas than the fee. &ldquo;Small&rdquo;
+          means a quoted fee under {cutoff}, Confluence&rsquo;s own cutoff (Relay publishes none); those are expected. Larger ones are worth raising with Relay.
+        </span>
+      </div>
+      {u.byRoute.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-left text-xs">
+            <thead className="text-ink-muted">
+              <tr>
+                <th className="py-1 pr-3 font-medium">Route</th>
+                <th className="py-1 pr-3 text-right font-medium">Requests</th>
+                <th className="py-1 pr-3 text-right font-medium">Quoted total</th>
+                <th className="py-1 pr-3 text-right font-medium">Largest</th>
+                <th className="py-1 font-medium">Last seen</th>
+              </tr>
+            </thead>
+            <tbody className="tnum font-mono">
+              {u.byRoute.map((r) => (
+                <tr key={route(r)} className="border-t border-border">
+                  <td className="py-1.5 pr-3">{route(r)}</td>
+                  <td className="py-1.5 pr-3 text-right">{r.count}</td>
+                  <td className="py-1.5 pr-3 text-right">{money(r.quotedUsd)}</td>
+                  <td className={`py-1.5 pr-3 text-right ${r.maxQuotedUsd >= u.smallFeeCutoffUsd ? "text-warning" : ""}`}>{money(r.maxQuotedUsd)}</td>
+                  <td className="py-1.5">{new Date(r.lastAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-1 text-xs text-ink-muted">Top {u.byRoute.length} routes by count.</p>
+        </div>
+      )}
+      {u.larger.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">Larger fees not collected (latest {u.larger.length})</span>
+          <ul className="tnum flex flex-col gap-1 font-mono text-xs">
+            {u.larger.map((r) => (
+              <li key={r.requestId} className="flex flex-wrap justify-between gap-x-3">
+                <span>
+                  {route(r)} · {money(r.quotedUsd)} quoted{r.amountInUsd !== null ? ` on ${money(r.amountInUsd)}` : ""}
+                </span>
+                <span className="text-ink-muted">
+                  {r.requestId.slice(0, 10)}... · {new Date(r.createdAt).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
