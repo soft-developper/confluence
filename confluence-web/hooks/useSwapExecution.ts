@@ -31,6 +31,9 @@ export interface StartSwapArgs {
   sender: `0x${string}`;
   tokenIn: SwapTokenSymbol;
   tokenOut: SwapTokenSymbol;
+  /** The values passed to App Kit (an alias, or cirBTC's address); default to the symbols. */
+  kitTokenIn?: string;
+  kitTokenOut?: string;
   amountIn: string;
   slippageBps: number;
   registry: readonly BridgeChain[];
@@ -100,8 +103,8 @@ export function useSwapExecution() {
           result = await kit.swap({
             from: { adapter, chain: a.chain as never },
             ...(a.destinationChain ? { to: { chain: a.destinationChain as never, recipientAddress: a.sender } } : {}),
-            tokenIn: a.tokenIn,
-            tokenOut: a.tokenOut,
+            tokenIn: a.kitTokenIn ?? a.tokenIn,
+            tokenOut: a.kitTokenOut ?? a.tokenOut,
             amountIn: a.amountIn,
             config: { slippageBps: a.slippageBps },
           });

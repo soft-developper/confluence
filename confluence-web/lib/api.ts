@@ -239,7 +239,7 @@ export async function fetchTransfer(id: string): Promise<TransferDetail | null> 
 
 // ---------- swaps (Stage 6a) ----------
 
-export type SwapTokenSymbol = "USDC" | "EURC" | "USDT" | "NATIVE";
+export type SwapTokenSymbol = "USDC" | "EURC" | "USDT" | "NATIVE" | "CIRBTC";
 
 export const SwapChainsSchema = z.object({
   chains: z.array(
@@ -249,7 +249,7 @@ export const SwapChainsSchema = z.object({
       evmChainId: z.number(),
       tokens: z.array(
         z.object({
-          symbol: z.enum(["USDC", "EURC", "USDT", "NATIVE"]),
+          symbol: z.enum(["USDC", "EURC", "USDT", "NATIVE", "CIRBTC"]),
           address: z.string().nullable(),
           decimals: z.number(),
           label: z.string(),
@@ -261,7 +261,8 @@ export const SwapChainsSchema = z.object({
 export type SwapChainInfo = z.infer<typeof SwapChainsSchema>["chains"][number];
 
 export async function fetchSwapChains(): Promise<SwapChainInfo[]> {
-  const res = await apiFetch(`${publicEnv.apiUrl}/swaps/chains`);
+  // ?tokens=all: this build can swap tokens added later, such as cirBTC (confluence:cirbtc-swap-ui).
+  const res = await apiFetch(`${publicEnv.apiUrl}/swaps/chains?tokens=all`);
   if (!res.ok) throw await readError(res);
   return SwapChainsSchema.parse(await res.json()).chains;
 }

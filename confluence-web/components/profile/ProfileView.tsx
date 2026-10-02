@@ -371,7 +371,7 @@ function HistoryRow({
         : `Bridge ${it.amountIn} USDC${who ? ` to ${who}` : ""}`
       : it.kind === "relay"
         ? `${it.destinationChain !== it.sourceChain ? "Bridge" : "Swap"} ${fmtAmount(it.amountIn)} ${it.tokenIn} → ${it.amountOut ? `${fmtAmount(it.amountOut)} ` : ""}${it.tokenOut} via Relay`
-        : `Swap ${it.amountIn} ${it.tokenIn} → ${it.amountOut ? `${it.amountOut} ` : ""}${it.tokenOut}`;
+        : `Swap ${it.amountIn} ${swapTokenLabel(it.tokenIn)} → ${it.amountOut ? `${it.amountOut} ` : ""}${swapTokenLabel(it.tokenOut)}`;
   const src = chains.find((c) => c.id === it.sourceChain);
   let href: string | undefined;
   if (it.kind === "bridge") href = `/tx/${it.id}`;
@@ -409,4 +409,9 @@ function HistoryRow({
       )}
     </li>
   );
+}
+
+/** Display name for a Confluence swap token symbol (confluence:cirbtc-swap-ui). */
+function swapTokenLabel(symbol: string): string {
+  return symbol === "CIRBTC" ? "cirBTC" : symbol;
 }

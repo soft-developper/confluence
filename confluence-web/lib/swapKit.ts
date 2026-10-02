@@ -58,6 +58,23 @@ export async function loadSwapKit(opts: {
 
 export type { SwapEstimate, SwapResult };
 
+/**
+ * The token value App Kit's swap expects (confluence:cirbtc-swap-ui). USDC, EURC, USDT and
+ * NATIVE are App Kit aliases. cirBTC is not a public alias yet, so its contract address (from
+ * the API's chain list, sourced from Circle's docs) is passed instead.
+ */
+export function kitSwapToken(chain: { tokens: readonly { symbol: string; address: string | null }[] } | undefined, symbol: SwapTokenSymbol): string {
+  if (symbol !== "CIRBTC") return symbol;
+  const address = chain?.tokens.find((t) => t.symbol === "CIRBTC")?.address;
+  if (!address) throw new Error("cirBTC is not available on this network");
+  return address;
+}
+
+/** App Kit spells some tokens differently (CIRBTC vs cirBTC): compare without case. */
+export function sameSwapToken(a: string | undefined, b: string | undefined): boolean {
+  return !!a && !!b && a.toUpperCase() === b.toUpperCase();
+}
+
 /** The developer (our) fee from App Kit's fee list, if present. */
 export function developerFee(fees: readonly { type: string; token: string; amount: string | null }[] | undefined) {
   const f = fees?.find((x) => x.type === "developer");

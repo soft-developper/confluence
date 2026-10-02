@@ -7,7 +7,7 @@ import { erc20Abi, formatUnits, parseUnits, type EIP1193Provider } from "viem";
 import { useBalance, useConnection, useReadContract, useSwitchChain } from "wagmi";
 import { fetchSwapChains, postSwapFee, type SwapChainInfo, type SwapTokenSymbol } from "@/lib/api";
 import { shortAddress } from "@/lib/chains";
-import { cleanAmount, developerFee, loadSwapKit } from "@/lib/swapKit";
+import { cleanAmount, developerFee, loadSwapKit, kitSwapToken, sameSwapToken } from "@/lib/swapKit";
 import { useBridgeChains } from "@/components/Providers";
 import { ConnectModal } from "@/components/wallet/ConnectModal";
 import { useDebounced } from "@/hooks/useDebounced";
@@ -18,6 +18,11 @@ const DEFAULT_SLIPPAGE = 100; // 1% (locked decision; App Kit's own default is 3
 const AMOUNT_INPUT = /^\d{0,18}(\.\d{0,18})?$/;
 /** Warn when our fee is at least this share of the swap. */
 const HIGH_FEE_SHARE = 0.05;
+
+/** Decimal places to show for a token: up to 8 for cirBTC (BTC-sized amounts), 6 otherwise. */
+const placesFor = (t: { decimals: number } | undefined) => Math.min(Math.max(t?.decimals ?? 6, 6), 8);
+/** A rate as plain decimals with enough places for small values (1 USDC in cirBTC). */
+const fmtRate = (n: number) => (Number.isFinite(n) ? (n >= 1 ? fmt(String(n), 6) : n.toFixed(10).replace(/0+$/, "").replace(/\.$/, "")) : "0");
 
 function fmt(v: string, max = 6): string {
   const [w = "0", f = ""] = v.split(".");
@@ -48,11 +53,14 @@ export function SwapCard() {
   const [reviewing, setReviewing] = useState(false);
   const exec = useSwapExecution();
 
+  // cirBTC swaps are same-chain only for now (confluence:cirbtc-swap-ui), so cross-chain
+  // pickers leave it out.
+  const pickable = (c: SwapChainInfo | undefined) => (c && crossChain ? { ...c, tokens: c.tokens.filter((t) => t.symbol !== "CIRBTC") } : c);
   // Keep both tokens valid: tokenIn on the source chain, tokenOut on the destination.
   useEffect(() => {
     if (!chain || !dest) return;
-    const src = chain.tokens.map((t) => t.symbol);
-    const dst = dest.tokens.map((t) => t.symbol);
+    const src = chain.tokens.filter((t) => !crossChain || t.symbol !== "CIRBTC").map((t) => t.symbol);
+    const dst = dest.tokens.filter((t) => !crossChain || t.symbol !== "CIRBTC").map((t) => t.symbol);
     const tin = src.includes(tokenIn) ? tokenIn : (src[0] ?? "USDC");
     if (tin !== tokenIn) setTokenIn(tin);
     const bad = !dst.includes(tokenOut) || (!crossChain && tokenOut === tin);
@@ -101,8 +109,8 @@ export function SwapCard() {
       return kit.estimateSwap({
         from: { adapter, chain: chain!.id as never },
         ...(crossChain ? { to: { chain: dest!.id as never, recipientAddress: address! } } : {}),
-        tokenIn,
-        tokenOut,
+        tokenIn: kitSwapToken(chain, tokenIn),
+        tokenOut: kitSwapToken(dest, tokenOut),
         amountIn: debounced!,
         config: { slippageBps: slippage },
       });
@@ -117,7 +125,7 @@ export function SwapCard() {
   const fee = developerFee(est?.fees);
   const feeShare = useMemo(() => {
     if (!fee || !cleaned) return 0;
-    const base = fee.token === tokenIn ? Number(cleaned) : fee.token === tokenOut ? Number(est?.estimatedOutput.amount ?? 0) : 0;
+    const base = sameSwapToken(fee.token, tokenIn) ? Number(cleaned) : sameSwapToken(fee.token, tokenOut) ? Number(est?.estimatedOutput.amount ?? 0) : 0;
     return base > 0 ? Number(fee.amount) / base : 0;
   }, [fee, cleaned, tokenIn, tokenOut, est]);
   const stale = !!est && debounced !== cleaned;
@@ -162,11 +170,11 @@ export function SwapCard() {
         <div className="flex flex-col gap-1 rounded-md border border-border bg-bg p-4">
           <span className="text-xs text-ink-muted">You pay</span>
           <span className="tnum text-xl font-medium text-source-text">
-            {fmt(cleaned)} {tin.label}
+            {fmt(cleaned, placesFor(tin))} {tin.label}
           </span>
           <span className="mt-2 text-xs text-ink-muted">{run.amountOut ? "You received" : "You receive (estimated)"}</span>
           <span className="tnum text-[28px] leading-9 font-medium text-destination-text">
-            {fmt(run.amountOut ?? est.estimatedOutput.amount)} {tout.label}
+            {fmt(run.amountOut ?? est.estimatedOutput.amount, placesFor(tout))} {tout.label}
           </span>
         </div>
         <dl className="flex flex-col gap-2 text-sm">
@@ -178,8 +186,15 @@ export function SwapCard() {
           ) : (
             <Row label="Network" value={chain.name} />
           )}
-          <Row label={`Minimum received (${slippage / 100}% slippage)`} value={`${fmt(est.stopLimit.amount)} ${tout.label}`} />
-          <Row label="Confluence fee" value={fee ? `${fmt(fee.amount)} ${fee.token === "NATIVE" ? (tin.symbol === "NATIVE" ? tin.label : tout.label) : fee.token}` : "Included"} />
+          <Row label={`Minimum received (${slippage / 100}% slippage)`} value={`${fmt(est.stopLimit.amount, placesFor(tout))} ${tout.label}`} />
+          <Row
+            label="Confluence fee"
+            value={
+              fee
+                ? `${fmt(fee.amount, 8)} ${fee.token === "NATIVE" ? (tin.symbol === "NATIVE" ? tin.label : tout.label) : sameSwapToken(fee.token, "CIRBTC") ? "cirBTC" : fee.token}`
+                : "Included"
+            }
+          />
           <Row label="Wallet" value={shortAddress(address)} />
         </dl>
         {!started && (
@@ -229,6 +244,8 @@ export function SwapCard() {
                 sender: address,
                 tokenIn,
                 tokenOut,
+                kitTokenIn: kitSwapToken(chain, tokenIn),
+                kitTokenOut: kitSwapToken(dest ?? chain, tokenOut),
                 amountIn: cleaned,
                 slippageBps: slippage,
                 registry: bridgeChains,
@@ -292,7 +309,7 @@ export function SwapCard() {
       <div className="flex flex-col gap-2 rounded-md border border-border bg-bg p-4">
         <div className="flex items-center justify-between text-xs text-ink-muted">
           <span>You pay</span>
-          <span className="tnum font-mono">{balance !== undefined ? `Balance ${fmt(balance)}` : address ? "Balance ..." : ""}</span>
+          <span className="tnum font-mono">{balance !== undefined ? `Balance ${fmt(balance, placesFor(tin))}` : address ? "Balance ..." : ""}</span>
         </div>
         <div className="flex items-center gap-3">
           <input
@@ -313,7 +330,7 @@ export function SwapCard() {
               Max
             </button>
           )}
-          <TokenSelect chain={chain} value={tokenIn} onChange={setTokenIn} exclude={undefined} label="Token to pay" />
+          <TokenSelect chain={pickable(chain)} value={tokenIn} onChange={setTokenIn} exclude={undefined} label="Token to pay" />
         </div>
       </div>
 
@@ -341,18 +358,18 @@ export function SwapCard() {
         </div>
         <div className="flex items-center gap-3">
           <span className={`tnum min-w-0 flex-1 truncate text-[22px] font-medium ${est && !stale ? "text-destination-text" : "text-ink-muted"}`}>
-            {est && !stale ? fmt(est.estimatedOutput.amount) : estimateQ.isFetching ? "..." : "0.00"}
+            {est && !stale ? fmt(est.estimatedOutput.amount, placesFor(tout)) : estimateQ.isFetching ? "..." : "0.00"}
           </span>
-          <TokenSelect chain={dest} value={tokenOut} onChange={setTokenOut} exclude={crossChain ? undefined : tokenIn} label="Token to receive" />
+          <TokenSelect chain={pickable(dest)} value={tokenOut} onChange={setTokenOut} exclude={crossChain ? undefined : tokenIn} label="Token to receive" />
         </div>
       </div>
 
       <div className="flex flex-col gap-2 text-sm">
         {est && !stale && tin && tout && cleaned && (
           <>
-            <Row label="Rate" value={`1 ${tin.label} ≈ ${fmt(String(Number(est.estimatedOutput.amount) / Number(cleaned)), 6)} ${tout.label}`} />
-            <Row label="Minimum received" value={`${fmt(est.stopLimit.amount)} ${tout.label}`} />
-            <Row label="Confluence fee" value={fee ? `${fmt(fee.amount)} ${fee.token}` : "Included"} />
+            <Row label="Rate" value={`1 ${tin.label} ≈ ${fmtRate(Number(est.estimatedOutput.amount) / Number(cleaned))} ${tout.label}`} />
+            <Row label="Minimum received" value={`${fmt(est.stopLimit.amount, placesFor(tout))} ${tout.label}`} />
+            <Row label="Confluence fee" value={fee ? `${fmt(fee.amount, 8)} ${sameSwapToken(fee.token, "CIRBTC") ? "cirBTC" : fee.token}` : "Included"} />
           </>
         )}
         <div className="flex items-center justify-between gap-3">
