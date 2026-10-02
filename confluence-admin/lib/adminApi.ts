@@ -111,6 +111,8 @@ export interface ActivityItem {
   fee: string | null;
   errorCode: string | null;
   txHash: string | null;
+  /** Destination-chain transaction: a bridge's mint or a cross-chain swap's delivery (older APIs omit it). */
+  destTxHash?: string | null;
 }
 export interface Problem {
   kind: "bridge" | "swap";

@@ -184,11 +184,11 @@ export async function activity(db: Db, a: ActivityQuery) {
   const st = a.state ? sql`and state = ${a.state}` : sql``;
   const bridgeSel = sql`select 'bridge' as kind, id, state, created_at as at, source_chain as source, destination_chain as destination,
       sender, recipient, recipient_id as recipientId, null as tokenIn, null as tokenOut, amount_base as amount, platform_fee_base as fee,
-      error_code as errorCode, burn_tx_hash as txHash
+      error_code as errorCode, burn_tx_hash as txHash, mint_tx_hash as destTxHash
     from transfers where 1 = 1 ${tq} ${st}`;
   const swapSel = sql`select 'swap' as kind, id, state, created_at as at, chain as source, destination_chain as destination,
       sender, recipient, null as recipientId, token_in as tokenIn, token_out as tokenOut, amount_in as amount, fee_charged as fee,
-      error_code as errorCode, swap_tx_hash as txHash
+      error_code as errorCode, swap_tx_hash as txHash, destination_tx_hash as destTxHash
     from swaps where 1 = 1 ${sq} ${st}`;
   const union = a.kind === "bridge" ? bridgeSel : a.kind === "swap" ? swapSel : sql`${bridgeSel} union all ${swapSel}`;
   const [{ n } = { n: 0 }] = await all(db, sql`select count(*) as n from (${union})`);
@@ -209,6 +209,9 @@ export async function activity(db: Db, a: ActivityQuery) {
     fee: r.fee == null ? null : r.kind === "bridge" ? formatUsdc(big(r.fee)) : String(r.fee),
     errorCode: r.errorCode == null ? null : String(r.errorCode),
     txHash: r.txHash == null ? null : String(r.txHash),
+    // Destination-chain transaction (confluence:activity-explorer-links): a bridge's mint, or a
+    // cross-chain swap's delivery. Null until it lands (and for same-chain swaps).
+    destTxHash: r.destTxHash == null ? null : String(r.destTxHash),
   }));
   return { items, page, pageSize: lim, total, totalPages: Math.max(1, Math.ceil(total / lim)) };
 }

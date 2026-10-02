@@ -290,21 +290,28 @@ function ActivityTab() {
           </thead>
           <tbody>
             {items.map((x) => {
-              const link = x.kind === "bridge" ? `/tx/${x.id}` : tx(x.source, x.txHash);
+              // Explorer links on each chain, opened in a new tab so the dashboard stays put
+              // (confluence:activity-explorer-links). Same-chain swaps have one transaction.
+              const crossChain = !!x.destination && x.destination !== x.source;
+              const srcLink = tx(x.source, x.txHash);
+              const dstLink = crossChain ? tx(x.destination!, x.destTxHash ?? null) : undefined;
+              const label = `${x.kind === "bridge" ? "Bridge" : "Swap"} ${x.amount} ${x.token}`;
               return (
                 <tr key={`${x.kind}-${x.id}`} className="border-t border-border align-top">
                   <td className="py-1.5 font-mono text-xs whitespace-nowrap text-ink-muted">{new Date(x.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}</td>
                   <td className="py-1.5">
-                    {link ? (
-                      <a href={link} target={x.kind === "swap" ? "_blank" : undefined} rel="noopener noreferrer" className="text-action-text hover:underline">
-                        {x.kind === "bridge" ? "Bridge" : "Swap"} {x.amount} {x.token}
-                      </a>
-                    ) : (
-                      <span>
-                        {x.kind === "bridge" ? "Bridge" : "Swap"} {x.amount} {x.token}
-                      </span>
-                    )}
+                    <span>{label}</span>
                     {x.recipientId && <span className="text-ink-muted"> to @{x.recipientId}</span>}
+                    <span className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
+                      {crossChain ? (
+                        <>
+                          <ExplorerLink href={srcLink} hash={x.txHash} text={`${name(x.source)} tx`} missing={x.kind === "bridge" ? "no burn yet" : "no tx yet"} />
+                          <ExplorerLink href={dstLink} hash={x.destTxHash ?? null} text={`${name(x.destination!)} tx`} missing={x.kind === "bridge" ? "no mint yet" : "no delivery yet"} />
+                        </>
+                      ) : (
+                        <ExplorerLink href={srcLink} hash={x.txHash} text={`${name(x.source)} tx`} missing="no tx yet" />
+                      )}
+                    </span>
                   </td>
                   <td className="py-1.5 text-xs">
                     {name(x.source)}
@@ -822,4 +829,27 @@ function AccountTab() {
       </Panel>
     </div>
   );
+}
+
+/**
+ * A chain explorer link that opens in a new tab. Without a transaction yet it shows a muted note;
+ * with a transaction on a chain whose explorer isn't in the bridge chain list (some swap-only
+ * chains), it shows the shortened hash, with the full hash on hover.
+ */
+function ExplorerLink({ href, hash, text, missing }: { href: string | undefined; hash: string | null; text: string; missing: string }) {
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-action-text hover:underline">
+        {text} ↗
+      </a>
+    );
+  }
+  if (hash) {
+    return (
+      <span className="font-mono text-ink-muted" title={hash}>
+        {text} {hash.slice(0, 10)}...
+      </span>
+    );
+  }
+  return <span className="text-ink-muted">{missing}</span>;
 }
