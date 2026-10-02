@@ -6,11 +6,12 @@ import { userRateLimit } from "../middleware/rateLimits.js";
 import { createSwap, getSwap, recordSwapReport, swapFee, SwapError } from "../swaps/service.js";
 import type { SwapRegistry } from "../swaps/tokens.js";
 import { REPORT_TOKEN_HEADER } from "./transfers.js";
+import { OPT_IN_TOKENS } from "../swaps/tokens.js";
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/, "must be an EVM address");
 const txHash = z.string().regex(/^0x[0-9a-fA-F]{64}$/, "must be a 32-byte hex transaction hash");
 const amount = z.string().regex(/^\d{1,18}(\.\d{1,18})?$/, "must be a positive decimal");
-const token = z.enum(["USDC", "EURC", "USDT", "NATIVE"]);
+const token = z.enum(["USDC", "EURC", "USDT", "NATIVE", "CIRBTC"]);
 const uuid = z.uuid();
 
 const FeeBody = z.object({ chain: z.string().max(64), token, amount });
@@ -56,9 +57,17 @@ function sendSwapError(res: Response, e: unknown): boolean {
 export function swapsRouter(db: Db, reg: SwapRegistry) {
   const router = Router();
 
-  /** Chains and tokens swaps support in this environment (from App Kit). */
-  router.get("/swaps/chains", (_req, res) => {
-    res.json({ chains: reg.chains });
+  /**
+   * Chains and tokens swaps support in this environment (from App Kit). Tokens added later
+   * (cirBTC) are listed only with ?tokens=all, so older web builds keep their known list
+   * (confluence:cirbtc-swap).
+   */
+  router.get("/swaps/chains", (req, res) => {
+    if (req.query.tokens === "all") {
+      res.json({ chains: reg.chains });
+      return;
+    }
+    res.json({ chains: reg.chains.map((c) => ({ ...c, tokens: c.tokens.filter((t) => !OPT_IN_TOKENS.has(t.symbol)) })) });
   });
 
   /** Stateless fee for estimates (App Kit computeFee before a swap row exists). */

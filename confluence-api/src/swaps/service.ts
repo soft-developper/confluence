@@ -64,6 +64,11 @@ export async function createSwap(db: Db, reg: SwapRegistry, input: CreateSwapInp
   if (!tin) throw new SwapError(400, "unsupported_token", `${input.tokenIn} is not swappable on ${chain.name}`);
   if (!tout) throw new SwapError(400, "unsupported_token", `${input.tokenOut} is not swappable on ${dest.name}`);
   if (!crossChain && tin.symbol === tout.symbol) throw new SwapError(400, "same_token", "tokenIn and tokenOut must differ");
+  // cirBTC: Circle's swap service quotes same-chain routes (checked on Arc and Ethereum);
+  // cross-chain cirBTC routes are not verified yet, so they are refused (confluence:cirbtc-swap).
+  if (crossChain && (tin.symbol === "CIRBTC" || tout.symbol === "CIRBTC")) {
+    throw new SwapError(400, "cirbtc_same_chain_only", "cirBTC swaps are same-chain only for now");
+  }
   // USDC to USDC across chains is a bridge: CCTP moves it 1:1 without a swap.
   if (crossChain && tin.symbol === "USDC" && tout.symbol === "USDC") {
     throw new SwapError(400, "use_bridge", "moving USDC between chains is a bridge; use the Bridge tab");

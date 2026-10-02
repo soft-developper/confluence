@@ -7,9 +7,29 @@ import type { Config } from "../config.js";
  * Tokens are limited to what the chain definition lists (usdcAddress, eurcAddress,
  * usdtAddress) plus the native token, so nothing here is hand-maintained.
  */
-export type SwapToken = "USDC" | "EURC" | "USDT" | "NATIVE";
+export type SwapToken = "USDC" | "EURC" | "USDT" | "NATIVE" | "CIRBTC";
 /** Tokens whose value is one unit of fiat; the flat bridge fee rule applies to them. */
 export const STABLE_TOKENS: ReadonlySet<SwapToken> = new Set(["USDC", "EURC", "USDT"]);
+
+/**
+ * cirBTC (Circle Wrapped Bitcoin, 8 decimals) on the chains where Circle has deployed it, from
+ * Circle's developer docs: https://developers.circle.com/assets/cirbtc-contract-addresses
+ * (App Kit's built-in cirBTC definition uses the same addresses). Circle's swap service quotes
+ * cirBTC routes on Arc and Ethereum (checked with kit.estimateSwap on mainnet). It is not a
+ * public App Kit token alias yet, so a swap passes this address to kit.swap instead of a
+ * symbol. Keyed by App Kit chain id. (confluence:cirbtc-swap)
+ */
+export const CIRBTC_ADDRESSES: Readonly<Record<string, string>> = Object.freeze({
+  Arc: "0x171A4217b86A807A64eB94757Db6849fb4bDbAA0",
+  Ethereum: "0x72DFB2E44f59C5AD2bAFE84314E5b99a7cd5075E",
+  Arc_Testnet: "0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF",
+});
+
+/**
+ * Tokens added after the first Swap UI shipped. GET /swaps/chains lists them only to clients
+ * that ask with ?tokens=all, so an older web build never offers a token it can't swap yet.
+ */
+export const OPT_IN_TOKENS: ReadonlySet<SwapToken> = new Set(["CIRBTC"]);
 
 export interface SwapChain {
   id: string;
@@ -48,6 +68,8 @@ export function buildSwapRegistry(config: Config, kit: Pick<AppKit, "getSupporte
     if (d.nativeCurrency.symbol !== "USDC") {
       tokens.push({ symbol: "NATIVE", address: null, decimals: d.nativeCurrency.decimals, label: d.nativeCurrency.symbol });
     }
+    const cirbtc = CIRBTC_ADDRESSES[d.chain];
+    if (cirbtc) tokens.push({ symbol: "CIRBTC", address: cirbtc, decimals: 8, label: "cirBTC" });
     chains.push({ id: d.chain, name: d.name, evmChainId: d.chainId, tokens, rpcUrls: [...(d.rpcEndpoints ?? [])] });
   }
   return { chains, byId: new Map(chains.map((c) => [c.id, c])) };
