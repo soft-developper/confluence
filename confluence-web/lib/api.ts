@@ -239,7 +239,13 @@ export async function fetchTransfer(id: string): Promise<TransferDetail | null> 
 
 // ---------- swaps (Stage 6a) ----------
 
-export type SwapTokenSymbol = "USDC" | "EURC" | "USDT" | "NATIVE" | "CIRBTC";
+/**
+ * Every swap token this build knows, in one place (confluence:swap-token-list). All swap
+ * schemas below read this list, so a token added here is accepted everywhere at once.
+ */
+export const SWAP_TOKEN_SYMBOLS = ["USDC", "EURC", "USDT", "NATIVE", "CIRBTC"] as const;
+export type SwapTokenSymbol = (typeof SWAP_TOKEN_SYMBOLS)[number];
+const SwapSymbol = z.enum(SWAP_TOKEN_SYMBOLS);
 
 export const SwapChainsSchema = z.object({
   chains: z.array(
@@ -249,7 +255,7 @@ export const SwapChainsSchema = z.object({
       evmChainId: z.number(),
       tokens: z.array(
         z.object({
-          symbol: z.enum(["USDC", "EURC", "USDT", "NATIVE", "CIRBTC"]),
+          symbol: SwapSymbol,
           address: z.string().nullable(),
           decimals: z.number(),
           label: z.string(),
@@ -288,8 +294,8 @@ export const CreatedSwapSchema = z.object({
   destinationChain: z.string().nullable().optional(),
   sender: z.string(),
   recipient: z.string(),
-  tokenIn: z.enum(["USDC", "EURC", "USDT", "NATIVE"]),
-  tokenOut: z.enum(["USDC", "EURC", "USDT", "NATIVE"]),
+  tokenIn: SwapSymbol,
+  tokenOut: SwapSymbol,
   amountIn: z.string(),
   feeRecipient: z.string(),
 });
@@ -328,6 +334,16 @@ export type SwapReportBody =
       destinationTxHash?: string;
     }
   | { step: "error"; errorCategory?: string; errorMessage?: string };
+
+/**
+ * Text for a swap that could not be created. An API refusal carries its own message. A reply
+ * this build cannot read is not a connection problem, so it gets its own wording.
+ */
+export function swapStartErrorText(e: unknown): string {
+  if (e instanceof ApiError) return e.message;
+  if (e instanceof z.ZodError) return "Confluence sent a reply this page could not read. Refresh the page and try again.";
+  return "Could not reach the Confluence API. Try again.";
+}
 
 /** Reports one swap step. For the fee step the API answers with our backend fee. */
 export async function postSwapEvent(id: string, token: string, body: SwapReportBody): Promise<{ state: string; fee?: string }> {

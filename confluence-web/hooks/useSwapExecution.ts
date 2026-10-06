@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import type { EIP1193Provider } from "viem";
 import type { SwapResult } from "@circle-fin/app-kit";
-import { ApiError, postSwap, postSwapEvent, type CreatedSwap, type SwapReportBody, type SwapTokenSymbol } from "@/lib/api";
+import { postSwap, postSwapEvent, swapStartErrorText, type CreatedSwap, type SwapReportBody, type SwapTokenSymbol } from "@/lib/api";
 import type { BridgeChain } from "@/lib/chains";
 import { developerFee, loadSwapKit, withTxCapture } from "@/lib/swapKit";
 import { saveTransferToken } from "@/lib/transferToken";
@@ -65,7 +65,8 @@ export function useSwapExecution() {
           crypto.randomUUID(),
         );
       } catch (e) {
-        setRun({ phase: "error", error: e instanceof ApiError ? e.message : "Could not reach the Confluence API. Try again." });
+        console.warn("confluence: swap create failed:", e instanceof Error ? e.message : e);
+        setRun({ phase: "error", error: swapStartErrorText(e) });
         return;
       }
       // Same browser-only token store as transfers (Stage 2e), keyed by the swap id.
