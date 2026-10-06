@@ -75,6 +75,17 @@ export function sameSwapToken(a: string | undefined, b: string | undefined): boo
   return !!a && !!b && a.toUpperCase() === b.toUpperCase();
 }
 
+/**
+ * Text for a failed swap estimate (confluence:swap-no-route). Circle answers a quote with
+ * "No route available" when it will not route this pair at this amount (seen with small
+ * cirBTC amounts), so that one case gets plain wording. Every other error keeps Circle's text.
+ */
+export function estimateErrorText(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e);
+  if (/no route available/i.test(message)) return "Circle has no route for this swap at this amount right now. Try a larger amount.";
+  return `No estimate for this swap right now: ${message.slice(0, 160)}`;
+}
+
 /** The developer (our) fee from App Kit's fee list, if present. */
 export function developerFee(fees: readonly { type: string; token: string; amount: string | null }[] | undefined) {
   const f = fees?.find((x) => x.type === "developer");

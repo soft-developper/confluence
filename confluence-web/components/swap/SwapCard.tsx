@@ -7,7 +7,7 @@ import { erc20Abi, formatUnits, parseUnits, type EIP1193Provider } from "viem";
 import { useBalance, useConnection, useReadContract, useSwitchChain } from "wagmi";
 import { fetchSwapChains, postSwapFee, type SwapChainInfo, type SwapTokenSymbol } from "@/lib/api";
 import { shortAddress } from "@/lib/chains";
-import { cleanAmount, developerFee, loadSwapKit, kitSwapToken, sameSwapToken } from "@/lib/swapKit";
+import { cleanAmount, developerFee, estimateErrorText, loadSwapKit, kitSwapToken, sameSwapToken } from "@/lib/swapKit";
 import { useBridgeChains } from "@/components/Providers";
 import { ConnectModal } from "@/components/wallet/ConnectModal";
 import { useDebounced } from "@/hooks/useDebounced";
@@ -413,7 +413,7 @@ export function SwapCard() {
       )}
       {estimateQ.isError && cleaned && !insufficient && (
         <div role="alert" className="rounded-md border border-danger bg-bg p-3 text-[13px]">
-          No estimate for this swap right now: {(estimateQ.error as Error).message.slice(0, 160)}
+          {estimateErrorText(estimateQ.error)}
         </div>
       )}
 
