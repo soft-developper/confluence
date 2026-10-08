@@ -22,6 +22,8 @@ export interface BridgeChain {
   forwarderAsDestination: boolean;
   /** CCTP v2 MessageTransmitter (destination mints), from App Kit; null if not listed. */
   messageTransmitter: string | null;
+  /** CCTP v2 TokenMessenger (emits DepositForBurn on the source), from App Kit; null if not listed. */
+  tokenMessenger: string | null;
   /** Source-side attestation times from Circle's docs; null when not listed. */
   speed: FinalityInfo | null;
 }
@@ -34,9 +36,9 @@ export interface ChainRegistry {
 }
 
 /** App Kit's v2 contract block is either "split" (with messageTransmitter) or merged. */
-function messageTransmitterOf(cctp: unknown): string | null {
+function v2ContractOf(cctp: unknown, key: "messageTransmitter" | "tokenMessenger"): string | null {
   const v2 = (cctp as { contracts?: { v2?: Record<string, unknown> } } | undefined)?.contracts?.v2;
-  const addr = v2?.["messageTransmitter"];
+  const addr = v2?.[key];
   return typeof addr === "string" && /^0x[0-9a-fA-F]{40}$/.test(addr) ? addr : null;
 }
 
@@ -63,7 +65,8 @@ export function buildChainRegistry(config: Config, kit: Pick<AppKit, "getSupport
       nativeCurrency: { name: c.nativeCurrency.name, symbol: c.nativeCurrency.symbol, decimals: c.nativeCurrency.decimals },
       rpcUrls: [...c.rpcEndpoints],
       forwarderAsDestination: c.cctp.forwarderSupported.destination,
-      messageTransmitter: messageTransmitterOf(c.cctp),
+      messageTransmitter: v2ContractOf(c.cctp, "messageTransmitter"),
+      tokenMessenger: v2ContractOf(c.cctp, "tokenMessenger"),
       speed: finalityFor(c.chain),
     });
   }

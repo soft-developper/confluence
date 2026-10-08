@@ -129,12 +129,13 @@ export async function history(db: Db, address: string, opts: { page: number; pag
   const lim = Math.min(Math.max(opts.pageSize ?? HISTORY_PAGE_SIZE, 1), 50);
   const pageNo = Math.max(1, Math.floor(opts.page));
   const offset = (pageNo - 1) * lim;
-  // Outgoing (this wallet sent) and incoming (this wallet was paid). Bridges appear only once
-  // the tracker matched Circle's message to them (confluence:verified-transfers): sender and
-  // recipient come from an unsigned request, so an unverified row proves nothing about either.
+  // Outgoing (this wallet sent) and incoming (this wallet was paid). Bridges appear once the
+  // tracker matched Circle's message to them (confluence:verified-transfers), or earlier, once
+  // it proved the burn on the source chain (confluence:source-burn-proof): sender and
+  // recipient come from an unsigned request, so a row with neither proves nothing about either.
   const owner = and(
     or(sql`lower(${transfers.sender}) = ${address}`, sql`lower(${transfers.recipient}) = ${address}`),
-    isNotNull(transfers.verifiedAt),
+    or(isNotNull(transfers.verifiedAt), isNotNull(transfers.sourceBurnAt)),
   )!;
   // Swaps appear once the tracker verified them (confluence:verified-swaps).
   const swapOwner = and(sql`lower(${swaps.sender}) = ${address}`, isNotNull(swaps.verifiedAt))!;
@@ -148,7 +149,7 @@ export async function history(db: Db, address: string, opts: { page: number; pag
   const total = Number(nT) + Number(nS) + Number(nR);
   const pageRefs = (await db.all(
     sql`select 'bridge' as kind, id, created_at as at from transfers
-          where (lower(sender) = ${address} or lower(recipient) = ${address}) and verified_at is not null
+          where (lower(sender) = ${address} or lower(recipient) = ${address}) and (verified_at is not null or source_burn_at is not null)
         union all
         select 'swap' as kind, id, created_at as at from swaps where lower(sender) = ${address} and verified_at is not null
         union all

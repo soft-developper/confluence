@@ -9,6 +9,7 @@ import { loadConfig } from "../config.js";
 import { createDb } from "../db/client.js";
 import { TokenBucket } from "../lib/tokenBucket.js";
 import { trackOnce } from "../tracker/tracker.js";
+import { checkSourceBurnsOnce } from "../tracker/sourceBurn.js";
 import { trackSwapsOnce } from "../tracker/swaps.js";
 import { buildSwapRegistry } from "../swaps/tokens.js";
 import { AppKit } from "@circle-fin/app-kit";
@@ -24,6 +25,8 @@ async function main() {
   const db = createDb(config);
   const limiter = new TokenBucket(config.CIRCLE_MAX_RPS * 2, config.CIRCLE_MAX_RPS);
   const messages = new IrisMessagesClient(IRIS_BASE_URL[config.CONFLUENCE_ENV], limiter);
+  const b = await checkSourceBurnsOnce({ db, registry, log: (m) => console.log(m) });
+  console.log(`[${config.CONFLUENCE_ENV}] source burns: checked ${b.checked}, proven ${b.proven}, rejected ${b.rejected}, errors ${b.errors}`);
   const r = await trackOnce({ db, registry, messages, log: (m) => console.log(m) });
   console.log(`[${config.CONFLUENCE_ENV}] transfers: checked ${r.checked}, moved ${r.moved}, errors ${r.errors}`);
   const kit = new AppKit();

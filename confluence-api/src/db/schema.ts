@@ -80,6 +80,13 @@ export const transfers = sqliteTable(
     // (confluence:verified-transfers). Null = not verified by Circle's data yet. Only
     // verified transfers appear in history and count in analytics.
     verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
+    // Source-chain proof of the burn (confluence:source-burn-proof): the tracker read the burn
+    // receipt from the source chain and found a DepositForBurn that matches this transfer.
+    // Lets history show a burn before Circle attests it. Null = not proven (yet).
+    sourceBurnAt: integer("source_burn_at", { mode: "timestamp_ms" }),
+    // Result of that check: "ok", "reverted", "no_matching_burn" or "sender_mismatch".
+    // Null = not checked yet (or the chain did not know the transaction yet).
+    sourceBurnCheck: text("source_burn_check"),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
   },

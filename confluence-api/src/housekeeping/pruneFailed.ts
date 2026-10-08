@@ -207,7 +207,9 @@ function prunableTransfers(cutoff: Date) {
   return and(
     or(
       and(eq(transfers.state, "FAILED"), isNull(transfers.burnTxHash), isNull(transfers.mintTxHash)),
-      and(eq(transfers.state, "RECOVERY_REQUIRED"), eq(transfers.errorCode, "burn_not_found"), isNull(transfers.verifiedAt)),
+      // A burn proven on the source chain is real money in flight: never pruned
+      // (confluence:source-burn-proof).
+      and(eq(transfers.state, "RECOVERY_REQUIRED"), eq(transfers.errorCode, "burn_not_found"), isNull(transfers.verifiedAt), isNull(transfers.sourceBurnAt)),
     ),
     lt(transfers.updatedAt, cutoff),
   );

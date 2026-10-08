@@ -6,6 +6,7 @@ import { transferEvents, transfers } from "../db/schema.js";
 import { isNonceUsed } from "./chainReads.js";
 import { decide, recheckAfterMs, STOP_CODES, verifyMessage, type Decision } from "./decide.js";
 import { trackSwapsOnce, type SwapStatusFn } from "./swaps.js";
+import { checkSourceBurnsOnce } from "./sourceBurn.js";
 import type { SwapRegistry } from "../swaps/tokens.js";
 
 export interface TrackerDeps {
@@ -166,6 +167,9 @@ export function startTracker(deps: TrackerDeps, intervalMs: number): () => void 
     if (running) return; // never overlap passes
     running = true;
     try {
+      // Source-chain burn proof first, so a fresh burn shows in history within one pass.
+      const b = await checkSourceBurnsOnce({ db: deps.db, registry: deps.registry, fetchImpl: deps.fetchImpl, log });
+      if (b.checked > 0) log(`tracker: source burns checked ${b.checked}, proven ${b.proven}, rejected ${b.rejected}, errors ${b.errors}`);
       const r = await trackOnce({ ...deps, log });
       if (r.checked > 0) log(`tracker: pass checked ${r.checked}, moved ${r.moved}, errors ${r.errors}`);
       if (deps.getSwapStatus) {

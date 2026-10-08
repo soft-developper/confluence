@@ -84,3 +84,23 @@ export async function isNonceUsed(
   const out = await ethCall(rpcUrls, messageTransmitter, USED_NONCES_SELECTOR + nonce.slice(2).toLowerCase(), fetchImpl);
   return out !== "0x" && BigInt(out) !== 0n;
 }
+
+export interface TxReceipt {
+  status: string;
+  from: string;
+  logs: { address: string; topics: string[]; data: string }[];
+}
+
+/** A transaction receipt (confluence:source-burn-proof). null when the node does not know it yet. */
+export async function getReceipt(rpcUrls: readonly string[], txHash: string, fetchImpl: typeof fetch = fetch): Promise<TxReceipt | null> {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) throw new Error("tx hash is not 32 bytes");
+  const r = (await rpc(rpcUrls, "eth_getTransactionReceipt", [txHash], fetchImpl)) as Record<string, unknown> | null;
+  if (!r) return null;
+  if (typeof r.status !== "string" || typeof r.from !== "string" || !Array.isArray(r.logs)) throw new Error("RPC returned a malformed receipt");
+  const logs = (r.logs as Record<string, unknown>[]).map((l) => ({
+    address: String(l.address ?? ""),
+    topics: Array.isArray(l.topics) ? l.topics.map(String) : [],
+    data: typeof l.data === "string" ? l.data : "0x",
+  }));
+  return { status: r.status.toLowerCase(), from: r.from, logs };
+}
