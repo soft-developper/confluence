@@ -301,6 +301,28 @@ const STATE_LABEL: Record<string, string> = {
   REFUNDED: "Refunded",
 };
 
+/**
+ * In-flight bridge states (confluence:source-burn-proof). A bridge shows in history once its
+ * burn is proven on the source chain, before Circle attests it, so these states are visible.
+ * Returns null for anything else (shared labels above apply).
+ */
+function bridgeLabel(it: HistoryItem): { label: string; needsUser: boolean } | null {
+  if (it.kind !== "bridge") return null;
+  switch (it.state) {
+    case "BURN_SUBMITTED":
+    case "BURN_CONFIRMED":
+    case "ATTESTATION_PENDING":
+      return { label: "Burned, waiting for Circle", needsUser: false };
+    case "ATTESTED":
+      // Forwarding on: Circle mints for the user. Off: the user finishes on the transaction page.
+      return it.forwarding === false ? { label: "Ready to mint", needsUser: true } : { label: "Delivering", needsUser: false };
+    case "MINT_SUBMITTED":
+      return { label: "Minting", needsUser: false };
+    default:
+      return null;
+  }
+}
+
 function HistoryCard({ token, address }: { token: string; address: string }) {
   const { chains } = useBridgeChains();
   const nameOf = (id: string | null) => (id ? (chains.find((c) => c.id === id)?.name ?? id) : "");
@@ -351,9 +373,12 @@ function HistoryRow({
   chains: ReturnType<typeof useBridgeChains>["chains"];
   relayChains: readonly RelayChain[];
 }) {
-  const label = STATE_LABEL[it.state] ?? it.state.replace(/_/g, " ").toLowerCase();
+  const inFlight = bridgeLabel(it);
+  const label = inFlight?.label ?? STATE_LABEL[it.state] ?? it.state.replace(/_/g, " ").toLowerCase();
   const tone =
-    it.state === "COMPLETED"
+    inFlight?.needsUser
+      ? "text-warning"
+      : it.state === "COMPLETED"
       ? "text-destination-text"
       : it.state === "FAILED" || it.state === "CREATED"
         ? "text-ink-muted"

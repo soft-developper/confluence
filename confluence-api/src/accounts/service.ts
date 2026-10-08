@@ -110,6 +110,8 @@ export interface HistoryItem {
   recipient: string;
   txHash: string | null;
   errorCode: string | null;
+  /** Bridge items only: Circle's Forwarding Service mints on the destination (else the user mints). */
+  forwarding?: boolean;
   /** Relay items only: EVM chain ids, for explorer links from Relay's chain list. */
   originChainId?: number;
   destinationChainId?: number;
@@ -191,6 +193,7 @@ export async function history(db: Db, address: string, opts: { page: number; pag
       recipient: x.recipient,
       txHash: x.burnTxHash,
       errorCode: x.errorCode,
+      forwarding: x.useForwarder,
       };
     }),
     ...s.map((x) => ({

@@ -427,6 +427,8 @@ export const HistoryItemSchema = z.object({
   recipient: z.string(),
   txHash: z.string().nullable(),
   errorCode: z.string().nullable(),
+  /** Bridge items: Circle's Forwarding Service mints on the destination (else the user mints). */
+  forwarding: z.boolean().optional(),
   /** Relay items (R3b): EVM chain ids for explorer links from Relay's chain list. */
   originChainId: z.number().optional(),
   destinationChainId: z.number().optional(),
