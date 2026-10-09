@@ -22,7 +22,7 @@ import { Callout } from "nextra/components";
 
 - **Forwarding stalled?** If Circle's Forwarding Service hasn't delivered your USDC 30 minutes after attestation, the transaction page lets you complete the mint yourself. There's no risk of paying twice.
 - **Attestation expired?** **Complete mint** asks Circle for a fresh attestation first, with no signature needed.
-- **Relay can't complete a route?** Relay may refund you on the chain you sent from. Your history shows **Refunded**.
+- **Relay can't complete a route?** Relay refunds you to the wallet you sent from, on that chain, in the token you sent, minus the gas for the refund. Your history shows **Refunded**.
 - **Closed the page?** No problem. Bridges are tracked in the background, and Relay routes update through Relay's signed status updates, so your history catches up on its own.
 
 ## Maintenance and pauses

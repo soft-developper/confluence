@@ -48,7 +48,7 @@ The quote breaks down every cost:
 
 ## Status and refunds
 
-Your Relay transfers appear in your Profile history with their status: **Waiting**, **In progress**, **Complete**, **Refunded** or **Failed**. If Relay can't complete a route, it may refund you on the chain you sent from instead. Statuses update on their own; you don't need to keep the page open for your history to catch up.
+Your Relay transfers appear in your Profile history with their status: **Waiting**, **In progress**, **Complete**, **Refunded** or **Failed**. If Relay can't complete a route, it refunds you to the wallet you sent from, on that chain, in the token you sent, minus the gas for the refund. The refund goes to your own wallet even when you were sending to someone else. If the amount is too small to cover that gas, Relay sends no refund and the route shows **Failed**. Statuses update on their own; you don't need to keep the page open for your history to catch up.
 
 <Callout type="warning">
   Keep the page open while your wallet steps are running. Once your transaction is sent, delivery continues even if you close it.

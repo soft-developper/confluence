@@ -34,7 +34,8 @@ const ChainId = z.number().int().positive();
 
 /**
  * Only the quote fields a bridge or swap needs. Calls (txs), deposit addresses and fee
- * sponsorship are dropped; appFees, referrer and includeProtocolData are set by us.
+ * sponsorship are dropped; appFees, referrer, includeProtocolData and refundTo are set by
+ * us. A refundTo sent by the browser is dropped (confluence:relay-refund-to).
  */
 export const QuoteInput = z
   .object({
@@ -46,7 +47,6 @@ export const QuoteInput = z
     destinationCurrency: z.string().regex(EVM, "must be an EVM token address"),
     amount: z.string().regex(/^[1-9][0-9]{0,77}$/, "must be a positive integer in base units"),
     tradeType: z.enum(["EXACT_INPUT", "EXACT_OUTPUT"]),
-    refundTo: z.string().regex(EVM).optional(),
     slippageTolerance: z.string().regex(/^[0-9]{1,5}$/).optional(),
     usePermit: z.boolean().optional(),
     explicitDeposit: z.boolean().optional(),
@@ -87,6 +87,11 @@ export function buildQuoteBody(input: QuoteInput, extras: QuoteExtras) {
   return {
     ...input,
     recipient: input.recipient ?? input.user,
+    // Refunds always go back to the wallet that pays (confluence:relay-refund-to). Relay's
+    // refunds guide says automatic refunds are off when refundTo is not set
+    // (https://docs.relay.link/references/api/api_core_concepts/refunds); its quote
+    // reference says it falls back to the recipient, who may be someone else.
+    refundTo: input.user,
     referrer: extras.referrer,
     includeProtocolData: true,
     ...(appFees ? { appFees } : {}),

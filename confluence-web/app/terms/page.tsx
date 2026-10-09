@@ -107,7 +107,8 @@ export default function TermsPage() {
             <B>Relay routes</B> carry a Confluence app fee in basis points of the input value, shown on the quote (0.01% by
             default; we may change it, and the rate on your quote is the one that applies). Relay also charges its own
             costs, shown on the quote as execution cost, swap cost and Relay platform fee. If Relay can&rsquo;t complete a
-            route, it may refund you on the source chain instead.
+            route, it may refund you instead, to the wallet you sent from on the source chain, less the gas for the
+            refund.
           </P>
           <P>
             Every fee is shown on the quote before you sign. Circle&rsquo;s fees on a quote are estimates and can change
