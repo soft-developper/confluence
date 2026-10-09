@@ -7,7 +7,8 @@ import { activeFeeRecipient } from "../fees/quote.js";
 
 /**
  * Relay integration settings (R1), stored in site_settings under "relay".
- * appFeeBps is Confluence's app fee in basis points of the input value
+ * appFeeBps is Confluence's app fee in basis points of the input value (default 1 = 0.01%,
+ * the same rate as the bridge fee above 1,000, confluence:fee-no-cliff)
  * (https://docs.relay.link/features/app-fees). 0 means no app fee.
  * (confluence:relay-settings)
  */
@@ -16,7 +17,7 @@ export const MAX_APP_FEE_BPS = 300;
 export const RelaySettingsSchema = z
   .object({
     enabled: z.boolean().default(true),
-    appFeeBps: z.number().int().min(0).max(MAX_APP_FEE_BPS).default(10),
+    appFeeBps: z.number().int().min(0).max(MAX_APP_FEE_BPS).default(1),
   })
   .strict();
 export type RelaySettings = z.infer<typeof RelaySettingsSchema>;

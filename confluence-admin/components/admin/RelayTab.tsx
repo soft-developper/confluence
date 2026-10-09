@@ -221,7 +221,7 @@ function SettingsCard({ data, configured, onSaved }: { data: RelaySettingsRes; c
       <div className="flex flex-col gap-2 border-t border-border pt-4">
         <Field
           label="Confluence app fee (basis points of the input value)"
-          hint={`0 to ${data.maxAppFeeBps}. 10 bps = 0.10%. 0 charges no app fee (Relay's own fees still apply). Paid to ${data.appFeeRecipient ? short(data.appFeeRecipient) : "the Base fee recipient"}.`}
+          hint={`0 to ${data.maxAppFeeBps}. 1 bps = 0.01%, the same rate as the bridge fee above 1,000. 0 charges no app fee (Relay's own fees still apply). Paid to ${data.appFeeRecipient ? short(data.appFeeRecipient) : "the Base fee recipient"}.`}
         >
           <div className="flex items-center gap-3">
             <input className={`${inputCls} w-28`} inputMode="numeric" value={bps} onChange={(e) => setBps(e.target.value.replace(/\D/g, "").slice(0, 3))} aria-label="App fee in basis points" />

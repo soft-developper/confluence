@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "The terms that apply when you use Confluence.",
 };
 
-const EFFECTIVE_DATE = "28 September 2026";
+const EFFECTIVE_DATE = "9 October 2026";
 const OPERATOR = "Softdeveloper";
 const CONTACT_EMAIL = "support@confluencebuild.xyz";
 
@@ -94,8 +94,8 @@ export default function TermsPage() {
 
         <Section title="Fees">
           <P>
-            For each bridge, Confluence charges a platform fee of <B>0.30 USDC for amounts up to 1,000 USDC</B>, and{" "}
-            <B>0.10% of the whole amount for bridges over 1,000 USDC</B>. The platform fee is added to the amount you send, so the
+            For each bridge, Confluence charges a platform fee of <B>0.30 USDC for amounts up to 1,000 USDC</B>. For bridges
+            over 1,000 USDC, the fee is <B>0.30 USDC plus 0.01% of the part above 1,000 USDC</B>. The platform fee is added to the amount you send, so the
             recipient receives the amount you entered, less Circle&rsquo;s fees.
           </P>
           <P>
@@ -104,7 +104,7 @@ export default function TermsPage() {
             own fee and a slippage limit, both shown before you confirm.
           </P>
           <P>
-            <B>Relay routes</B> carry a Confluence app fee in basis points of the input value, shown on the quote (0.10% by
+            <B>Relay routes</B> carry a Confluence app fee in basis points of the input value, shown on the quote (0.01% by
             default; we may change it, and the rate on your quote is the one that applies). Relay also charges its own
             costs, shown on the quote as execution cost, swap cost and Relay platform fee. If Relay can&rsquo;t complete a
             route, it may refund you on the source chain instead.

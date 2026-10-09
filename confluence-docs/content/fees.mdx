@@ -14,7 +14,7 @@ Every fee is shown on the quote before you sign, and nothing is charged until yo
 | Bridge amount | Confluence platform fee |
 | --- | --- |
 | Up to and including 1,000 USDC | **0.30 USDC** |
-| Over 1,000 USDC | **0.10% of the whole amount** |
+| Over 1,000 USDC | **0.30 USDC + 0.01% of the part above 1,000** |
 
 The platform fee is **added on top** of the amount you bridge. The review screen shows the bridge amount, the platform fee, and the **total debit**: what actually leaves your wallet.
 
@@ -24,12 +24,12 @@ The platform fee is **added on top** of the amount you bridge. The review screen
 | --- | --- | --- |
 | 50 USDC | 0.30 | 50.30 USDC |
 | 1,000 USDC | 0.30 | 1,000.30 USDC |
-| 1,000.01 USDC | 1.00001 | 1,001.01001 USDC |
-| 5,000 USDC | 5.00 | 5,005.00 USDC |
+| 1,000.01 USDC | 0.300001 | 1,000.310001 USDC |
+| 5,000 USDC | 0.70 | 5,000.70 USDC |
+| 100,000 USDC | 10.20 | 100,010.20 USDC |
 
 <Callout type="info">
-  The fee steps up at 1,000 USDC: at exactly 1,000 it's 0.30, just above it's about 1.00. If you're close to the line, sending 1,000 or less
-  keeps the flat fee.
+  There's no jump at 1,000 USDC: the fee grows smoothly from 0.30, by 0.01 USDC for every 100 USDC above 1,000.
 </Callout>
 
 Percentage fees are rounded up to the smallest USDC unit (0.000001).
@@ -46,14 +46,14 @@ These are shown separately on the quote and aren't Confluence fees:
 
 Confluence's swap fee follows the same rule, applied to the token the fee is taken in (shown on the quote):
 
-- **Stablecoins** (USDC, EURC, USDT): 0.30 for amounts up to 1,000, and 0.10% of the whole amount above that.
-- **Any other token:** 0.10% of the amount.
+- **Stablecoins** (USDC, EURC, USDT): 0.30 for amounts up to 1,000, and 0.30 plus 0.01% of the part above 1,000.
+- **Any other token** (for example cirBTC): 0.01% of the amount, rounded up to the token's smallest unit.
 
 Circle's App Kit route and the network's gas are shown on the quote as well.
 
 ## Relay routes
 
-- **Confluence fee:** a percentage of the value you send, shown on every Relay quote (0.10% by default). The rate on your quote is the one that applies.
+- **Confluence fee:** a percentage of the value you send, shown on every Relay quote (0.01% by default). The rate on your quote is the one that applies.
 - **Relay's own costs**, each shown on the quote:
   - **Execution cost:** gas and delivery on the route.
   - **Swap cost:** the cost of any swap within the route.
