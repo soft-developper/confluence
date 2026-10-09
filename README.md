@@ -1,6 +1,6 @@
 # Confluence
 
-USDC cross-chain bridge centered on Arc, built on Circle App Kit (CCTP).
+Move USDC in and out of Arc, and pay anyone by @name. A USDC bridge and swap centered on Arc, built on Circle App Kit (CCTP), with Relay for other chains.
 
 - `confluence-web/` - Next.js 16 frontend (Vercel)
 - `confluence-api/` - Express 5 backend (Render)

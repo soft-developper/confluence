@@ -45,7 +45,7 @@ function buildWagmiConfig(registry: readonly BridgeChain[]): Config {
         showQrModal: false, // we render our own QR screen
         metadata: {
           name: "Confluence",
-          description: "USDC across chains, centered on Arc",
+          description: "Move USDC in and out of Arc, and pay anyone by @name",
           url: origin,
           icons: [`${origin}/confluence-mark.svg`],
         },

@@ -9,7 +9,7 @@ import { Providers } from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "Confluence",
-  description: "USDC across chains, centered on Arc.",
+  description: "Move USDC in and out of Arc, and pay anyone by @name. Native USDC through Circle's CCTP, and other chains through Relay.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

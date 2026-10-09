@@ -73,7 +73,7 @@ export function SiteFooter() {
         <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-[1.4fr_1fr_1fr] sm:gap-8">
           <div className="col-span-2 flex flex-col gap-2 sm:col-span-1 sm:gap-3">
             <span className="text-lg font-medium">Confluence</span>
-            <p className="max-w-[320px] text-sm text-ink-muted">USDC across chains, centered on Arc.</p>
+            <p className="max-w-[320px] text-sm text-ink-muted">Move USDC in and out of Arc, and pay anyone by @name.</p>
             {networkLabel && (
               <span className="inline-flex flex-wrap items-center gap-2 text-sm">
                 <span className="h-2 w-2 rounded-full bg-destination" aria-hidden="true" />
