@@ -3,6 +3,10 @@ import { Hero } from "@/components/Hero";
 import { Offer } from "@/components/Offer";
 import { HowItWorks } from "@/components/HowItWorks";
 import { WhyUs } from "@/components/WhyUs";
+import { Security } from "@/components/Security";
+import { BuiltWith } from "@/components/BuiltWith";
+import { Faq } from "@/components/Faq";
+import { FinalCta } from "@/components/FinalCta";
 import { SiteFooter } from "@/components/SiteFooter";
 import { BackgroundMarks } from "@/components/BrandMarks";
 import { getChains, getFooter } from "@/lib/site";
@@ -21,6 +25,10 @@ export default async function LandingPage() {
         <Offer />
         <HowItWorks />
         <WhyUs />
+        <Security />
+        <BuiltWith chains={chains} />
+        <Faq />
+        <FinalCta />
       </main>
       <SiteFooter footer={footer} />
     </>

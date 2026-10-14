@@ -18,6 +18,18 @@ export function SiteHeader() {
         </Link>
         <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
           <a
+            href="#security"
+            className="hidden rounded-md px-3 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-action-text md:block"
+          >
+            Security
+          </a>
+          <a
+            href="#faq"
+            className="hidden rounded-md px-3 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-action-text md:block"
+          >
+            FAQ
+          </a>
+          <a
             href={DOCS_URL}
             className="hidden rounded-md px-3 py-2 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-action-text sm:block"
           >
