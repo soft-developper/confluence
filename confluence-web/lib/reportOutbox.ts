@@ -11,12 +11,14 @@
  * Reports for the same transfer or swap always go in the order they were made. The report
  * token needed to send them is the one already kept by lib/transferToken.
  */
-import { ApiError, postSwapEvent, postTransferEvent, type StepReportBody, type SwapReportBody } from "./api";
+import { ApiError, postArcPaymentEvent, postSwapEvent, postTransferEvent, type ArcPayReportBody, type StepReportBody, type SwapReportBody } from "./api";
 import { loadTransferToken } from "./transferToken";
 
 type Entry =
   | { key: string; kind: "transfer"; id: string; body: StepReportBody; createdAt: number; attempts: number; nextAt: number }
-  | { key: string; kind: "swap"; id: string; body: SwapReportBody; createdAt: number; attempts: number; nextAt: number };
+  | { key: string; kind: "swap"; id: string; body: SwapReportBody; createdAt: number; attempts: number; nextAt: number }
+  // Pay by ID on Arc (confluence:arc-pay): the fee and payment hashes, in that order.
+  | { key: string; kind: "arcpay"; id: string; body: ArcPayReportBody; createdAt: number; attempts: number; nextAt: number };
 
 const STORE = "confluence:report-outbox";
 const MAX_AGE_MS = 7 * 24 * 3600_000;
@@ -62,6 +64,7 @@ type Outcome = "done" | "drop" | "retry";
 async function sendOne(e: Entry, token: string): Promise<Outcome> {
   try {
     if (e.kind === "transfer") await postTransferEvent(e.id, token, e.body);
+    else if (e.kind === "arcpay") await postArcPaymentEvent(e.id, token, e.body);
     else await postSwapEvent(e.id, token, e.body);
     return "done";
   } catch (err) {
@@ -148,6 +151,11 @@ export function enqueueTransferReport(id: string, body: StepReportBody): Promise
 /** Queues a swap report. The promise settles after the first send attempt; it never rejects. */
 export function enqueueSwapReport(id: string, body: SwapReportBody): Promise<void> {
   return enqueue({ kind: "swap", id, body });
+}
+
+/** Queues an Arc payment report (fee or payment). The promise settles after the first send attempt; it never rejects. */
+export function enqueueArcPayReport(id: string, body: ArcPayReportBody): Promise<void> {
+  return enqueue({ kind: "arcpay", id, body });
 }
 
 /** Starts background delivery: now, when the browser comes back online, and when the tab is shown again. */

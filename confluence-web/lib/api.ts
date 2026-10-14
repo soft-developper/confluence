@@ -511,3 +511,91 @@ export async function fetchSiteStatus(): Promise<SiteStatus> {
   if (!res.ok) throw await readError(res);
   return SiteStatusSchema.parse(await res.json());
 }
+
+// ---------- Pay by Confluence ID on Arc (confluence:arc-pay) ----------
+
+export const CreatedArcPaymentSchema = z.object({
+  id: z.string(),
+  reportToken: z.string(),
+  state: z.string(),
+  chain: z.string(),
+  sender: z.string(),
+  recipient: z.string(),
+  recipientId: z.string(),
+  amount: Money,
+  fee: Money,
+  total: Money,
+  feeRecipient: z.string(),
+  usdc: z.object({ address: z.string(), decimals: z.literal(6) }),
+  note: z.string().nullable(),
+});
+export type CreatedArcPayment = z.infer<typeof CreatedArcPaymentSchema>;
+
+export async function postArcPayment(
+  input: { sender: string; recipientId: string; amount: string; note?: string },
+  idempotencyKey: string,
+): Promise<CreatedArcPayment> {
+  const res = await apiFetch(`${publicEnv.apiUrl}/arc-payments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await readError(res);
+  return CreatedArcPaymentSchema.parse(await res.json());
+}
+
+export interface ArcPayReportBody {
+  step: "fee" | "payment";
+  state: "success" | "error";
+  txHash?: string;
+  errorMessage?: string;
+}
+
+export async function postArcPaymentEvent(id: string, token: string, body: ArcPayReportBody): Promise<void> {
+  const res = await apiFetch(`${publicEnv.apiUrl}/arc-payments/${encodeURIComponent(id)}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Transfer-Token": token },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await readError(res);
+}
+
+/** Plain-language text for an Arc payment API error. */
+export function arcPayErrorText(e: unknown): string {
+  if (e instanceof ApiError) {
+    switch (e.code) {
+      case "id_not_found":
+        return "No one has claimed this Confluence ID.";
+      case "self_payment":
+        return "You can't pay your own Confluence ID.";
+      case "note_too_long":
+        return "The note can be at most 140 characters.";
+      case "chain_disabled":
+      case "maintenance":
+        return "Payments on Arc are paused for maintenance. Please try again later.";
+      case "rate_limited":
+        return "Too many payments in a short time. Wait a minute and try again.";
+      default:
+        return e.message;
+    }
+  }
+  return "Could not reach the Confluence API. Check your connection and try again.";
+}
+
+export const SavedIdSchema = z.object({ handle: z.string(), address: z.string(), createdAt: z.string() });
+export type SavedId = z.infer<typeof SavedIdSchema>;
+
+export async function fetchSavedIds(token: string): Promise<SavedId[]> {
+  const j = await (await authed(token, "/me/saved-ids")).json();
+  return z.object({ ids: z.array(SavedIdSchema) }).parse(j).ids;
+}
+
+export async function addSavedId(token: string, handle: string): Promise<SavedId[]> {
+  const j = await (await authed(token, "/me/saved-ids", { method: "POST", body: JSON.stringify({ handle }) })).json();
+  return z.object({ ids: z.array(SavedIdSchema) }).parse(j).ids;
+}
+
+export async function removeSavedId(token: string, handle: string): Promise<SavedId[]> {
+  const j = await (await authed(token, "/me/saved-ids/remove", { method: "POST", body: JSON.stringify({ handle }) })).json();
+  return z.object({ ids: z.array(SavedIdSchema) }).parse(j).ids;
+}

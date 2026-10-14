@@ -9,6 +9,8 @@ const TABS = [
   { href: "/", label: "Bridge" },
   { href: "/swap", label: "Swap" },
   { href: "/profile", label: "Profile" },
+  // Pay by Confluence ID (confluence:arc-pay), before Docs.
+  { href: "/pay", label: "Pay" },
 ] as const;
 
 export function NavTabs() {
