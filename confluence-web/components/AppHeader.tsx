@@ -1,9 +1,8 @@
 import Image from "next/image";
-import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { EnvBadge } from "@/components/EnvBadge";
 import { WalletButton } from "@/components/wallet/WalletButton";
-import { NavTabs } from "@/components/NavTabs";
+import { LANDING_URL, NavTabs } from "@/components/NavTabs";
 import { SessionSync } from "@/components/SessionSync";
 
 export function AppHeader() {
@@ -13,8 +12,10 @@ export function AppHeader() {
       <SessionSync />
       <div className="flex h-18 items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex items-center gap-2.5">
-          <Link
-            href="/"
+          {/* Logo and name go to the landing page on confluencebuild.xyz (confluence:landing-l4),
+              same tab; Bridge stays one click away in the nav. */}
+          <a
+            href={LANDING_URL}
             className="flex items-center gap-2.5"
             aria-label="Confluence home"
           >
@@ -27,7 +28,7 @@ export function AppHeader() {
             />
             {/* Wordmark hidden on phones so the header fits 390px (logo, env badge, theme, wallet). */}
             <span className="hidden text-lg font-medium sm:inline">Confluence</span>
-          </Link>
+          </a>
           <EnvBadge />
           <div className="ml-2 hidden sm:block">
             <NavTabs />

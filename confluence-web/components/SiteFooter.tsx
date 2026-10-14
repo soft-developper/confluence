@@ -6,7 +6,7 @@ import { fetchFooter, type FooterContent } from "@/lib/api";
 import { publicEnv } from "@/lib/env";
 import { useBridgeChains } from "@/components/Providers";
 import { Mark } from "@/components/BrandMarks";
-import { DOCS_URL } from "@/components/NavTabs";
+import { DOCS_URL, LANDING_URL } from "@/components/NavTabs";
 
 /**
  * Site footer. Editable content (built by, privacy, terms, copyright, socials, network
@@ -72,7 +72,9 @@ export function SiteFooter() {
       <div className="relative mx-auto flex w-full max-w-[1100px] flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
         <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-[1.4fr_1fr_1fr] sm:gap-8">
           <div className="col-span-2 flex flex-col gap-2 sm:col-span-1 sm:gap-3">
-            <span className="text-lg font-medium">Confluence</span>
+            <a href={LANDING_URL} className="self-start text-lg font-medium hover:underline">
+              Confluence
+            </a>
             <p className="max-w-[320px] text-sm text-ink-muted">Move USDC in and out of Arc, and pay anyone by @name.</p>
             {networkLabel && (
               <span className="inline-flex flex-wrap items-center gap-2 text-sm">

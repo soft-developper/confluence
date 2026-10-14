@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export const DOCS_URL = "https://docs.confluencebuild.xyz";
+// Landing page on the root domain (confluence:landing-l4). The logo and name return there.
+export const LANDING_URL = "https://confluencebuild.xyz";
 
 const TABS = [
   { href: "/", label: "Bridge" },
