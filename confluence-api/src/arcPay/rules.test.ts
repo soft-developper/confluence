@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { pad } from "viem";
 import type { ArcPaymentState } from "../db/schema.js";
 import type { TxReceipt } from "../tracker/chainReads.js";
-import { applyReport, checkUsdcTransfer, CLOCK_SKEW_MS, decideArcPayment, EXPIRE_AFTER_MS, tooOld, TRANSFER_TOPIC, TX_NOT_FOUND_AFTER_MS, type ArcPayRow, type ReportInput } from "./rules.js";
+import { applyReport, checkUsdcTransfer, CLOCK_SKEW_MS, decideArcPayment, EXPIRE_AFTER_MS, isFree, tooOld, TRANSFER_TOPIC, TX_NOT_FOUND_AFTER_MS, type ArcPayRow, type ReportInput } from "./rules.js";
 
 const USDC = "0x3600000000000000000000000000000000000000";
 const SYSTEM = "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE";
@@ -140,4 +140,53 @@ describe("decideArcPayment", () => {
   it("final states never change", () => {
     for (const state of ["COMPLETED", "EXPIRED", "FAILED"] as const) assert.equal(to(decideArcPayment(row({ state }), "ok", "ok", NOW)), "none");
   });
+});
+
+describe("free payments (no fee step)", () => {
+  const NOW = Date.UTC(2026, 9, 14, 12);
+  const base: ReportInput = { state: "CREATED", feeTxHash: null, payTxHash: null, step: "payment", stepState: "success", txHash: H2, free: true };
+  it("isFree only for a zero fee", () => {
+    assert.equal(isFree("0"), true);
+    assert.equal(isFree("300000"), false);
+    assert.equal(isFree(null), false);
+  });
+  it("the payment goes straight from CREATED (or FAILED) to PAYMENT_SUBMITTED", () => {
+    for (const state of ["CREATED", "FAILED"] as const) assert.deepEqual(applyReport({ ...base, state }), { kind: "move", to: "PAYMENT_SUBMITTED", errorCode: null, setPayTx: true });
+  });
+  it("a fee report is refused", () => assert.equal((applyReport({ ...base, step: "fee", txHash: H1 }) as { code: string }).code, "no_fee"));
+  it("a declined payment is FAILED (nothing moved)", () =>
+    assert.deepEqual(applyReport({ ...base, stepState: "error", txHash: undefined }), { kind: "move", to: "FAILED", errorCode: "payment_not_sent" }));
+  it("a different payment hash is refused, the same one changes nothing", () => {
+    assert.equal((applyReport({ ...base, state: "PAYMENT_SUBMITTED", payTxHash: H1 }) as { code: string }).code, "payment_tx_conflict");
+    assert.equal(applyReport({ ...base, state: "PAYMENT_SUBMITTED", payTxHash: H2 }).kind, "stay");
+  });
+  const row = (o: Partial<ArcPayRow>): ArcPayRow => ({
+    state: "PAYMENT_SUBMITTED",
+    feeBase: "0",
+    feeTxHash: null,
+    payTxHash: H2,
+    feeVerifiedAt: null,
+    payVerifiedAt: null,
+    errorCode: null,
+    createdAt: new Date(NOW - 60_000),
+    updatedAt: new Date(NOW - 60_000),
+    ...o,
+  });
+  const to = (d: ReturnType<typeof decideArcPayment>) => (d.kind === "update" ? d.to : "none");
+  it("completes on the payment proof alone, with no fee_unpaid", () => {
+    const d = decideArcPayment(row({}), undefined, "ok", NOW);
+    assert.equal(to(d), "COMPLETED");
+    assert.equal((d as { errorCode?: string | null }).errorCode, null);
+  });
+  it("sends a bad payment back to CREATED and drops the hash", () => {
+    const d = decideArcPayment(row({}), undefined, "reverted", NOW);
+    assert.equal(to(d), "CREATED");
+    assert.equal((d as { clearPayTx?: boolean }).clearPayTx, true);
+  });
+  it("waits for an unmined payment, then drops it after 2h", () => {
+    assert.equal(to(decideArcPayment(row({}), undefined, null, NOW)), "none");
+    assert.equal(to(decideArcPayment(row({ updatedAt: new Date(NOW - TX_NOT_FOUND_AFTER_MS - 1) }), undefined, null, NOW)), "CREATED");
+  });
+  it("expires an unsent free payment after 24h", () =>
+    assert.equal(to(decideArcPayment(row({ state: "CREATED", payTxHash: null, createdAt: new Date(NOW - EXPIRE_AFTER_MS - 1) }), undefined, undefined, NOW)), "EXPIRED"));
 });

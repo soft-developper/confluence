@@ -14,7 +14,7 @@ import { useBridgeExecution } from "@/hooks/useBridgeExecution";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useUsdcBalance } from "@/hooks/useUsdcBalance";
 import { useIdRecipient } from "@/hooks/useIdRecipient";
-import { useArcPayment } from "@/hooks/useArcPayment";
+import { isFreePayment, useArcPayment } from "@/hooks/useArcPayment";
 import { addSavedId, fetchMaxAmount, fetchSavedIds, postQuote, quoteErrorText, SessionExpiredError, type Quote, type ResumedArcPayment } from "@/lib/api";
 import { shortAddress, type BridgeChain } from "@/lib/chains";
 import { avatarFor, loadPaidIds, lookalikeId, previewFeeBase, recordPaidId } from "@/lib/pay";
@@ -22,7 +22,7 @@ import { clearSession, useSession } from "@/lib/session";
 
 /**
  * Pay page, Send (confluence:arc-pay): pay anyone by Confluence ID. Money always lands on
- * Arc. From Arc: two USDC transfers, fee then payment. From any other chain: the Bridge's
+ * Arc. From Arc: one free USDC transfer, no Confluence fee (confluence:arc-pay-free). From any other chain: the Bridge's
  * own CCTP flow to the ID's wallet on Arc, with Forwarding always on so Circle mints for the
  * recipient (confluence:pay-cross-chain). The ID is checked live, the review shows the
  * server's own numbers. Warn-only safety checks: first payment to an ID, look-alike IDs.
@@ -241,7 +241,8 @@ export function PayView({ prefill, finishRequest }: { prefill?: { handle: string
   const quote: Quote | undefined = req ? quoteQ.data : undefined;
   const quoting = !!req && (quoteQ.isFetching || quoteQ.isPlaceholderData);
 
-  const feeBase = crossChain ? (quote ? BigInt(quote.platformFee.base) : previewFeeBase(amountBase)) : previewFeeBase(amountBase);
+  // Arc to Arc is free; from another chain the Bridge's fee applies (the quote has the exact one).
+  const feeBase = crossChain ? (quote ? BigInt(quote.platformFee.base) : previewFeeBase(amountBase)) : 0n;
   const totalBase = crossChain && quote ? BigInt(quote.totalDebit.base) : amountBase + feeBase;
   const insufficient = amountBase > 0n && balanceBase !== undefined && totalBase > balanceBase;
 
@@ -255,17 +256,9 @@ export function PayView({ prefill, finishRequest }: { prefill?: { handle: string
       }
       return;
     }
+    // No fee on Arc: everything except a small reserve for the Arc network fee (paid in USDC).
     const room = balanceBase - GAS_RESERVE;
-    if (room <= 300_000n) return setAmount("0");
-    // Largest amount whose total (amount plus fee) fits: the total only grows with the amount.
-    let lo = 0n;
-    let hi = room;
-    while (lo < hi) {
-      const mid = (lo + hi + 1n) / 2n;
-      if (mid + previewFeeBase(mid) <= room) lo = mid;
-      else hi = mid - 1n;
-    }
-    setAmount(formatUnits(lo, 6));
+    setAmount(room > 0n ? formatUnits(room, 6) : "0");
   }
 
   const refetchBalance = balance.refetch;
@@ -517,7 +510,7 @@ export function PayView({ prefill, finishRequest }: { prefill?: { handle: string
         <span className="text-xs text-ink-muted">
           {crossChain
             ? `Arrives on ${arc.name} through Circle's CCTP. Circle mints it straight to the recipient.`
-            : `Sent on ${arc.name}: two quick transfers, the fee and then the payment.`}
+            : `Sent on ${arc.name} in one transfer, straight to the recipient. No Confluence fee.`}
         </span>
       </div>
 
@@ -552,7 +545,7 @@ export function PayView({ prefill, finishRequest }: { prefill?: { handle: string
         </div>
         {insufficient && balanceBase !== undefined && (
           <span className="text-[13px] text-danger">
-            You need {usdc(totalBase)} USDC including the fee. Your balance on {src.name} is {usdc(balanceBase)}.
+            You need {usdc(totalBase)} USDC{crossChain ? " including the fee" : ""}. Your balance on {src.name} is {usdc(balanceBase)}.
           </span>
         )}
       </div>
@@ -627,7 +620,7 @@ export function PayView({ prefill, finishRequest }: { prefill?: { handle: string
       {!crossChain && amountBase > 0n && (
         <div className="flex flex-col gap-2 rounded-md border border-border p-3">
           <Row label="Recipient gets" value={`${usdc(amountBase)} USDC`} />
-          <Row label="Confluence fee" value={`${usdc(feeBase)} USDC`} />
+          <Row label="Confluence fee" value="Free" />
           <div className="border-t border-border pt-2">
             <Row label="Total from your wallet" value={`${usdc(totalBase)} USDC`} strong />
           </div>
@@ -724,13 +717,15 @@ function ReviewAndProgress({
 }) {
   const p = state.payment!;
   const { phase, error, feeTx, payTx, confirming, finishing } = state;
+  /** A new payment with no Confluence fee: one transfer, no fee step. */
+  const free = !finishing && isFreePayment(p);
   const [saving, setSaving] = useState<"idle" | "busy" | "done" | "error">("idle");
 
   const feeStatus: StepStatus = finishing
     ? "done"
     : phase === "review" ? "waiting" : phase === "fee" ? (confirming ? "confirming" : "active") : phase === "error" && !error?.feePaid ? "error" : "done";
   const payStatus: StepStatus =
-    phase === "success" ? "done" : phase === "payment" ? (confirming ? "confirming" : "active") : phase === "error" && error?.feePaid ? "error" : "waiting";
+    phase === "success" ? "done" : phase === "payment" ? (confirming ? "confirming" : "active") : phase === "error" && (error?.feePaid || free) ? "error" : "waiting";
 
   return (
     <section className="flex w-full max-w-[460px] flex-col gap-5 rounded-lg border border-border bg-surface p-5 sm:p-6" aria-labelledby="pay-review-title">
@@ -746,7 +741,7 @@ function ReviewAndProgress({
             {fmt(p.amount.usdc)} <span className="text-lg text-ink-muted">USDC</span>
           </span>
           <span className="text-[13px] text-ink-muted">
-            on {arc.name}. It shows in your Activity once Confluence has confirmed both transfers on chain.
+            on {arc.name}. It shows in your Activity once Confluence has confirmed it on chain.
           </span>
         </div>
       ) : (
@@ -759,7 +754,7 @@ function ReviewAndProgress({
 
       <div className="flex flex-col gap-2 rounded-md border border-border p-3">
         <Row label="Recipient gets" value={`${fmt(p.amount.usdc)} USDC`} />
-        <Row label="Confluence fee" value={finishing ? `${fmt(p.fee.usdc)} USDC, paid earlier` : `${fmt(p.fee.usdc)} USDC`} />
+        <Row label="Confluence fee" value={free ? "Free" : finishing ? `${fmt(p.fee.usdc)} USDC, paid earlier` : `${fmt(p.fee.usdc)} USDC`} />
         <div className="border-t border-border pt-2">
           <Row label={finishing ? "To send now" : "Total from your wallet"} value={`${fmt(p.total.usdc)} USDC`} strong />
         </div>
@@ -774,9 +769,13 @@ function ReviewAndProgress({
 
       {phase !== "success" && (
         <div className="flex flex-col gap-3">
-          <span className="text-[13px] text-ink-muted">{finishing ? "Your fee is already paid. Your wallet asks you to confirm once:" : "Your wallet asks you to confirm twice:"}</span>
-          <StepLine n={1} title={`Fee: ${fmt(p.fee.usdc)} USDC to Confluence`} sub={finishing ? "Paid earlier." : "Sent first."} status={feeStatus} href={feeTx ? explorer(feeTx) : undefined} />
-          <StepLine n={2} title={`Payment: ${fmt(p.amount.usdc)} USDC to @${p.recipientId}`} sub={`Straight to ${shortAddress(p.recipient)}.`} status={payStatus} href={payTx ? explorer(payTx) : undefined} />
+          <span className="text-[13px] text-ink-muted">
+            {free ? "Your wallet asks you to confirm once:" : finishing ? "Your fee is already paid. Your wallet asks you to confirm once:" : "Your wallet asks you to confirm twice:"}
+          </span>
+          {!free && (
+            <StepLine n={1} title={`Fee: ${fmt(p.fee.usdc)} USDC to Confluence`} sub={finishing ? "Paid earlier." : "Sent first."} status={feeStatus} href={feeTx ? explorer(feeTx) : undefined} />
+          )}
+          <StepLine n={free ? 1 : 2} title={`Payment: ${fmt(p.amount.usdc)} USDC to @${p.recipientId}`} sub={`Straight to ${shortAddress(p.recipient)}.`} status={payStatus} href={payTx ? explorer(payTx) : undefined} />
         </div>
       )}
       {phase === "success" && payTx && (
@@ -807,7 +806,7 @@ function ReviewAndProgress({
         <div className="flex flex-col gap-2">
           {error?.canSendPayment &&
             (onArc ? (
-              <Primary onClick={onRetryPayment}>Send payment now (no new fee)</Primary>
+              <Primary onClick={onRetryPayment}>{free ? "Try again" : "Send payment now (no new fee)"}</Primary>
             ) : (
               <Primary onClick={onSwitch} disabled={switching}>
                 {switching ? "Switching..." : `Switch to ${arc.name}`}

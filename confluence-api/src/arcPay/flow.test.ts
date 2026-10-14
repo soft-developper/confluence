@@ -60,6 +60,15 @@ let db: Db;
 let key = 0;
 const create = (o: Partial<{ sender: string; recipientId: string; amount: string; note: string }> = {}) =>
   createArcPayment(db, registry, { sender: ME, recipientId: "@Them", amount: "50", idempotencyKey: `k-${++key}-xxxxxxxxxxxx`, ...o });
+/**
+ * A payment created before Arc payments became free: same row, with the old 0.30 fee and
+ * the fee Safe. In-flight payments like this must still finish the fee-first way.
+ */
+const legacy = async (o: Parameters<typeof create>[0] = {}) => {
+  const p = await create(o);
+  await db.update(schema.arcPayments).set({ feeBase: "300000", feeRecipient: SAFE }).where(eq(schema.arcPayments.id, p.id));
+  return p;
+};
 // Each pass one minute after the last, like the real tracker (it skips rows checked < 30s ago).
 let tick = 0;
 const track = () => trackArcPaymentsOnce({ db, registry, fetchImpl: fakeFetch }, Date.now() + ++tick * 60_000);
@@ -89,17 +98,21 @@ after(() => {
 });
 
 describe("creating an Arc payment", () => {
-  it("resolves the ID in any case, and computes the fee and total on the server", async () => {
+  it("resolves the ID in any case, and is free: no fee, no fee recipient", async () => {
     const p = await create({ note: "  thanks\nfor lunch  " });
     assert.equal(p.recipient, THEM);
     assert.equal(p.recipientId, "them");
-    assert.equal(p.fee.usdc, "0.3");
-    assert.equal(p.total.usdc, "50.3");
-    assert.equal(p.feeRecipient, SAFE);
+    assert.equal(p.fee.base, "0");
+    assert.equal(p.total.usdc, "50");
+    assert.equal(p.feeRecipient, null);
     assert.equal(p.usdc.address, USDC);
     assert.equal(p.note, "thanks for lunch");
   });
-  it("uses the new fee rule above 1,000", async () => assert.equal((await create({ amount: "100000" })).fee.usdc, "10.2"));
+  it("stays free above 1,000", async () => {
+    const p = await create({ amount: "100000" });
+    assert.equal(p.fee.base, "0");
+    assert.equal(p.total.usdc, "100000");
+  });
   it("refuses an unclaimed ID, paying yourself, a bad amount and a long note", async () => {
     assert.equal(await errCode(create({ recipientId: "nobody_here" })), "id_not_found");
     assert.equal(await errCode(create({ recipientId: "me_too" })), "self_payment");
@@ -108,9 +121,70 @@ describe("creating an Arc payment", () => {
   });
 });
 
-describe("the happy path, fee first", () => {
-  it("goes CREATED, FEE_SUBMITTED, FEE_PAID, PAYMENT_SUBMITTED, COMPLETED", async () => {
+describe("free payments, one transfer", () => {
+  it("goes CREATED, PAYMENT_SUBMITTED, COMPLETED with no fee step", async () => {
     const p = await create();
+    const report = (step: "fee" | "payment", txHash: string) => recordArcPaymentReport(db, p.id, p.reportToken, { step, state: "success", txHash });
+    assert.equal(await errCode(report("fee", hash(101))), "no_fee");
+    assert.equal((await report("payment", hash(102))).state, "PAYMENT_SUBMITTED");
+    await track(); // not mined yet
+    assert.equal((await getArcPayment(db, p.id)).state, "PAYMENT_SUBMITTED");
+    mined(hash(102), [transferLog(SYSTEM, ME, THEM, 50n * 10n ** 18n), transferLog(USDC, ME, THEM, 50_000_000n)]);
+    await track();
+    const done = await getArcPayment(db, p.id);
+    assert.equal(done.state, "COMPLETED");
+    assert.equal(done.paymentVerified, true);
+    assert.equal(done.errorCode, null);
+    assert.equal(done.feeTxHash, null);
+  });
+  it("marks a declined payment FAILED, and still accepts it if sent afterwards", async () => {
+    const p = await create();
+    await recordArcPaymentReport(db, p.id, p.reportToken, { step: "payment", state: "error" });
+    let v = await getArcPayment(db, p.id);
+    assert.equal(v.state, "FAILED");
+    assert.equal(v.errorCode, "payment_not_sent");
+    await recordArcPaymentReport(db, p.id, p.reportToken, { step: "payment", state: "success", txHash: hash(111) });
+    mined(hash(111), [transferLog(USDC, ME, THEM, 50_000_000n)]);
+    await track();
+    v = await getArcPayment(db, p.id);
+    assert.equal(v.state, "COMPLETED");
+  });
+  it("drops a payment for the wrong amount back to CREATED, nothing completed", async () => {
+    const p = await create();
+    await recordArcPaymentReport(db, p.id, p.reportToken, { step: "payment", state: "success", txHash: hash(121) });
+    mined(hash(121), [transferLog(USDC, ME, THEM, 1n)]);
+    await track();
+    const v = await getArcPayment(db, p.id);
+    assert.equal(v.state, "CREATED");
+    assert.equal(v.errorCode, "payment_no_matching_transfer");
+    assert.equal(v.payTxHash, null);
+  });
+  it("rejects an old payment mined before the payment existed", async () => {
+    const p = await create();
+    await recordArcPaymentReport(db, p.id, p.reportToken, { step: "payment", state: "success", txHash: hash(131) });
+    mined(hash(131), [transferLog(USDC, ME, THEM, 50_000_000n)]);
+    blockTimeSec -= 3600;
+    await track();
+    blockTimeSec += 3600;
+    assert.equal((await getArcPayment(db, p.id)).errorCode, "payment_too_old");
+  });
+  it("never links one payment transaction to two payments", async () => {
+    const a = await create();
+    const b = await create();
+    await recordArcPaymentReport(db, a.id, a.reportToken, { step: "payment", state: "success", txHash: hash(141) });
+    assert.equal(await errCode(recordArcPaymentReport(db, b.id, b.reportToken, { step: "payment", state: "success", txHash: hash(141) })), "tx_hash_taken");
+  });
+  it("expires a free payment never sent after 24h", async () => {
+    const p = await create();
+    await db.update(schema.arcPayments).set({ createdAt: new Date(Date.now() - 25 * 3600_000) }).where(eq(schema.arcPayments.id, p.id));
+    await track();
+    assert.equal((await getArcPayment(db, p.id)).state, "EXPIRED");
+  });
+});
+
+describe("payments created with a fee (before free) still finish, fee first", () => {
+  it("goes CREATED, FEE_SUBMITTED, FEE_PAID, PAYMENT_SUBMITTED, COMPLETED", async () => {
+    const p = await legacy();
     const report = (step: "fee" | "payment", txHash: string) => recordArcPaymentReport(db, p.id, p.reportToken, { step, state: "success", txHash });
 
     assert.equal(await errCode(report("payment", hash(2))), "fee_first");
@@ -133,13 +207,13 @@ describe("the happy path, fee first", () => {
   });
 });
 
-describe("safety", () => {
+describe("safety on payments with a fee", () => {
   it("refuses reports with a wrong token", async () => {
-    const p = await create();
+    const p = await legacy();
     assert.equal(await errCode(recordArcPaymentReport(db, p.id, "wrong", { step: "fee", state: "success", txHash: hash(10) })), "payment_not_found");
   });
   it("drops a fee for the wrong amount, then accepts a correct one", async () => {
-    const p = await create();
+    const p = await legacy();
     await recordArcPaymentReport(db, p.id, p.reportToken, { step: "fee", state: "success", txHash: hash(20) });
     mined(hash(20), [transferLog(USDC, ME, SAFE, 1n)]);
     await track();
@@ -154,7 +228,7 @@ describe("safety", () => {
     assert.equal(v.state, "FEE_PAID");
   });
   it("rejects an old transaction mined before the payment existed", async () => {
-    const p = await create();
+    const p = await legacy();
     await recordArcPaymentReport(db, p.id, p.reportToken, { step: "fee", state: "success", txHash: hash(30) });
     mined(hash(30), [transferLog(USDC, ME, SAFE, 300_000n)]);
     blockTimeSec -= 3600;
@@ -163,13 +237,13 @@ describe("safety", () => {
     assert.equal((await getArcPayment(db, p.id)).errorCode, "fee_too_old");
   });
   it("never links one transaction to two payments", async () => {
-    const a = await create();
-    const b = await create();
+    const a = await legacy();
+    const b = await legacy();
     await recordArcPaymentReport(db, a.id, a.reportToken, { step: "fee", state: "success", txHash: hash(40) });
     assert.equal(await errCode(recordArcPaymentReport(db, b.id, b.reportToken, { step: "fee", state: "success", txHash: hash(40) })), "tx_hash_taken");
   });
   it("keeps a paid fee when the payment is rejected, so it can be finished later", async () => {
-    const p = await create();
+    const p = await legacy();
     await recordArcPaymentReport(db, p.id, p.reportToken, { step: "fee", state: "success", txHash: hash(50) });
     mined(hash(50), [transferLog(USDC, ME, SAFE, 300_000n)]);
     await track();
@@ -184,12 +258,12 @@ describe("safety", () => {
     assert.equal(v.state, "COMPLETED");
   });
   it("marks a rejected fee as FAILED with nothing paid", async () => {
-    const p = await create();
+    const p = await legacy();
     await recordArcPaymentReport(db, p.id, p.reportToken, { step: "fee", state: "error" });
     assert.equal((await getArcPayment(db, p.id)).state, "FAILED");
   });
   it("expires payments that never got a fee after 24h", async () => {
-    const p = await create();
+    const p = await legacy();
     await db.update(schema.arcPayments).set({ createdAt: new Date(Date.now() - 25 * 3600_000) }).where(eq(schema.arcPayments.id, p.id));
     await track();
     assert.equal((await getArcPayment(db, p.id)).state, "EXPIRED");

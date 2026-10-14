@@ -8,7 +8,16 @@ import type { TxReceipt } from "../tracker/chainReads.js";
  * FEE_PAID -> payment signed -> PAYMENT_SUBMITTED -> tracker proves it -> COMPLETED.
  * Browser reports are unverified claims: they only reach the *_SUBMITTED states. FEE_PAID
  * never expires, so a paid fee is never lost; the payment can be finished later.
+ *
+ * Free payments (confluence:arc-pay-free): a payment created with fee 0 has no fee step.
+ * CREATED -> payment signed -> PAYMENT_SUBMITTED -> tracker proves it -> COMPLETED.
+ * Payments created with a fee before Arc payments became free keep the flow above.
  */
+
+/** A payment with no Confluence fee (feeBase "0"): no fee transfer exists or is expected. */
+export function isFree(feeBase: string | null | undefined): boolean {
+  return feeBase === "0";
+}
 
 // ---------- browser reports ----------
 
@@ -28,6 +37,8 @@ export interface ReportInput {
   step: ArcPayStep;
   stepState: ArcPayStepState;
   txHash?: string | undefined;
+  /** No fee step (see isFree). */
+  free?: boolean;
 }
 
 const same = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -37,6 +48,7 @@ export function applyReport(r: ReportInput): ReportResult {
   if (r.stepState === "success" && !r.txHash) return { kind: "reject", status: 400, code: "tx_hash_required", message: "a successful report must include txHash" };
 
   if (r.step === "fee") {
+    if (r.free) return { kind: "reject", status: 409, code: "no_fee", message: "this payment has no fee" };
     if (r.stepState === "error") {
       // The user rejected or the wallet failed before any fee was sent: nothing was paid.
       if (r.state === "CREATED" && !r.feeTxHash) return { kind: "move", to: "FAILED", errorCode: "fee_not_sent" };
@@ -52,6 +64,20 @@ export function applyReport(r: ReportInput): ReportResult {
   }
 
   // payment
+  if (r.free) {
+    if (r.stepState === "error") {
+      // Declined or failed before sending: nothing moved, nothing to keep.
+      if (r.payTxHash) return { kind: "stay", reason: "payment already reported" };
+      return r.state === "CREATED" ? { kind: "move", to: "FAILED", errorCode: "payment_not_sent" } : { kind: "stay", reason: "not_forward" };
+    }
+    if (r.payTxHash) {
+      return same(r.payTxHash, r.txHash)
+        ? { kind: "stay", reason: "payment already reported" }
+        : { kind: "reject", status: 409, code: "payment_tx_conflict", message: "this payment already has a different payment transaction" };
+    }
+    if (r.state === "CREATED" || r.state === "FAILED") return { kind: "move", to: "PAYMENT_SUBMITTED", errorCode: null, setPayTx: true };
+    return { kind: "stay", reason: "not_forward" };
+  }
   if (!r.feeTxHash) return { kind: "reject", status: 409, code: "fee_first", message: "the fee must be sent before the payment" };
   if (r.stepState === "error") {
     // The fee is paid or in flight: keep the state so the payment can be finished later.
@@ -125,6 +151,8 @@ export const TX_NOT_FOUND_AFTER_MS = 2 * 60 * 60 * 1000;
 
 export interface ArcPayRow {
   state: ArcPaymentState;
+  /** "0" for a free payment (no fee step). */
+  feeBase?: string;
   feeTxHash: string | null;
   payTxHash: string | null;
   feeVerifiedAt: Date | null;
@@ -160,7 +188,9 @@ export function decideArcPayment(row: ArcPayRow, fee: TransferCheck | null | und
       return { kind: "none", reason: "final" };
 
     case "CREATED":
-      return now - row.createdAt.getTime() > EXPIRE_AFTER_MS ? { kind: "update", to: "EXPIRED", reason: "no fee within 24h (nothing was paid)" } : { kind: "none", reason: "waiting for the fee" };
+      return now - row.createdAt.getTime() > EXPIRE_AFTER_MS
+        ? { kind: "update", to: "EXPIRED", reason: isFree(row.feeBase) ? "no payment within 24h (nothing was paid)" : "no fee within 24h (nothing was paid)" }
+        : { kind: "none", reason: isFree(row.feeBase) ? "waiting for the payment" : "waiting for the fee" };
 
     case "FEE_PAID":
       return { kind: "none", reason: "fee paid, waiting for the payment (never expires)" };
@@ -178,6 +208,17 @@ export function decideArcPayment(row: ArcPayRow, fee: TransferCheck | null | und
 
     case "PAYMENT_SUBMITTED": {
       const bad = (c: TransferCheck | null | undefined) => c === "reverted" || c === "no_matching_transfer" || c === "too_old";
+      if (isFree(row.feeBase)) {
+        // No fee to prove: the payment alone decides. A bad payment goes back to CREATED (it expires in 24h).
+        if (row.payVerifiedAt || pay === "ok") return { kind: "update", to: "COMPLETED", errorCode: null, payVerified: !row.payVerifiedAt, reason: "payment proven on Arc (free)" };
+        if (pay === undefined) return { kind: "none", reason: "not checked" };
+        if (pay === null) {
+          return age > TX_NOT_FOUND_AFTER_MS
+            ? { kind: "update", to: "CREATED", errorCode: "payment_not_found", clearPayTx: true, reason: "reported payment never appeared on Arc" }
+            : { kind: "none", reason: "payment not mined yet" };
+        }
+        return { kind: "update", to: "CREATED", errorCode: `payment_${pay}`, clearPayTx: true, reason: `reported payment is not valid (${pay})` };
+      }
       const feeOk = !!row.feeVerifiedAt || fee === "ok";
       const feeBad = !row.feeVerifiedAt && bad(fee);
       const feeMissing = !row.feeVerifiedAt && fee === null && age > TX_NOT_FOUND_AFTER_MS;

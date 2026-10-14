@@ -6,19 +6,25 @@ import { disabledChainIds } from "../chains/availability.js";
 import type { BridgeChain, ChainRegistry } from "../chains/registry.js";
 import type { Db } from "../db/client.js";
 import { arcPaymentEvents, arcPayments, type ArcPaymentState } from "../db/schema.js";
-import { activeFeeRecipient } from "../fees/quote.js";
-import { calculatePlatformFee } from "../fees/platformFee.js";
 import { formatUsdc, parseUsdc } from "../lib/usdc.js";
 import { getBlockTimeMs, getReceipt } from "../tracker/chainReads.js";
 import { cleanNote, NOTE_MAX, NoteError } from "./note.js";
-import { applyReport, checkUsdcTransfer, decideArcPayment, EXPIRE_AFTER_MS, tooOld, type ArcPayStep, type ArcPayStepState, type TransferCheck } from "./rules.js";
+import { applyReport, checkUsdcTransfer, decideArcPayment, EXPIRE_AFTER_MS, isFree, tooOld, type ArcPayStep, type ArcPayStepState, type TransferCheck } from "./rules.js";
 
 /**
  * Pay by Confluence ID, Arc to Arc (confluence:arc-pay). See rules.ts for the flow.
  * Every money value comes from the server: the amount is parsed here, the fee is the
  * platform rule, the recipient is resolved from the ID and the fee recipient from the
  * fee table. The browser only signs and reports.
+ *
+ * Arc to Arc payments are free (confluence:arc-pay-free): no Confluence fee, one transfer.
+ * Payments to an ID from another chain go through the bridge and keep the bridge fee.
  */
+
+/** Confluence fee on an Arc to Arc payment. Free while Pay grows. */
+export const ARC_PAY_FEE_BASE = 0n;
+/** Stored in fee_recipient (not null) for free payments: no fee is ever sent there. */
+const NO_FEE_RECIPIENT = "0x0000000000000000000000000000000000000000";
 
 export class ArcPayError extends Error {
   constructor(
@@ -99,9 +105,7 @@ export async function createArcPayment(db: Db, registry: ChainRegistry, input: C
   }
   if (resolved.address.toLowerCase() === input.sender.toLowerCase()) throw new ArcPayError(400, "self_payment", "you can't pay your own Confluence ID");
 
-  const feeRecipient = await activeFeeRecipient(db, arc.id);
-  if (!feeRecipient) throw new ArcPayError(503, "fee_recipient_not_configured", `no fee recipient configured for ${arc.id}`);
-  const fee = calculatePlatformFee(amount);
+  const fee = ARC_PAY_FEE_BASE;
   const note = noteOrThrow(input.note);
 
   const id = randomUUID();
@@ -119,7 +123,7 @@ export async function createArcPayment(db: Db, registry: ChainRegistry, input: C
         recipientId: resolved.handle,
         amountBase: amount.toString(),
         feeBase: fee.toString(),
-        feeRecipient: getAddress(feeRecipient),
+        feeRecipient: NO_FEE_RECIPIENT,
         note,
         reportTokenHash: sha256(token),
       }),
@@ -142,8 +146,9 @@ export async function createArcPayment(db: Db, registry: ChainRegistry, input: C
     amount: money(amount),
     fee: money(fee),
     total: money(amount + fee),
-    feeRecipient: getAddress(feeRecipient),
-    // What the wallet signs: two ERC-20 transfers on this contract, fee first.
+    // No fee: nothing is ever sent to a fee recipient.
+    feeRecipient: null,
+    // What the wallet signs: one ERC-20 transfer on this contract, to the recipient.
     usdc: { address: getAddress(arc.usdcAddress), decimals: 6 },
     note,
   };
@@ -163,7 +168,7 @@ export async function recordArcPaymentReport(db: Db, paymentId: string, token: s
   const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(arcPaymentEvents).where(eq(arcPaymentEvents.paymentId, p.id));
   if (n >= MAX_EVENTS_PER_PAYMENT) throw new ArcPayError(429, "too_many_reports", "report limit reached for this payment");
 
-  const r = applyReport({ state: p.state, feeTxHash: p.feeTxHash, payTxHash: p.payTxHash, step: report.step, stepState: report.state, txHash: report.txHash });
+  const r = applyReport({ state: p.state, feeTxHash: p.feeTxHash, payTxHash: p.payTxHash, step: report.step, stepState: report.state, txHash: report.txHash, free: isFree(p.feeBase) });
   if (r.kind === "reject") throw new ArcPayError(r.status, r.code, r.message);
 
   const tx = report.txHash?.toLowerCase();
@@ -235,7 +240,7 @@ export async function getArcPayment(db: Db, paymentId: string) {
     amount: money(p.amountBase),
     fee: money(p.feeBase),
     total: money(BigInt(p.amountBase) + BigInt(p.feeBase)),
-    feeRecipient: p.feeRecipient,
+    feeRecipient: isFree(p.feeBase) ? null : p.feeRecipient,
     feeTxHash: p.feeTxHash,
     payTxHash: p.payTxHash,
     feeVerified: !!p.feeVerifiedAt,
@@ -280,8 +285,9 @@ export async function trackArcPaymentsOnce(
       and(
         inArray(arcPayments.state, ACTIVE),
         or(isNull(arcPayments.trackedAt), sql`${arcPayments.trackedAt} < ${now - 30_000}`),
-        // CREATED rows only matter once they can expire; the rest have a transaction to prove.
-        or(and(eq(arcPayments.state, "CREATED"), sql`${arcPayments.createdAt} < ${now - EXPIRE_AFTER_MS}`), isNotNull(arcPayments.feeTxHash)),
+        // CREATED rows only matter once they can expire; the rest have a transaction to prove
+        // (a free payment has only the payment transaction).
+        or(and(eq(arcPayments.state, "CREATED"), sql`${arcPayments.createdAt} < ${now - EXPIRE_AFTER_MS}`), isNotNull(arcPayments.feeTxHash), isNotNull(arcPayments.payTxHash)),
       ),
     )
     .orderBy(asc(arcPayments.trackedAt))

@@ -368,7 +368,7 @@ function ActivityRow({ it, onPay, onFinish, finishing }: { it: PayActivityItem; 
               View on {arc?.name ?? "explorer"}
             </a>
           ))}
-        {sent && it.fee && <span className="font-mono text-[11px] text-ink-muted">fee {it.fee}</span>}
+        {sent && it.fee && <span className="font-mono text-[11px] text-ink-muted">{it.fee === "0" ? "no fee" : `fee ${it.fee}`}</span>}
       </div>
       {it.canFinish && (
         <p className="ml-12 text-xs text-warning">Your fee is paid. Finish the payment to send the money, with no new fee.</p>

@@ -60,7 +60,7 @@ const code = async (p: Promise<unknown>) => {
 };
 const arcPay = async (state: schema.ArcPaymentState, o: Partial<{ sender: string; recipientId: string; amount: string; note: string }> = {}) => {
   const p = await createArcPayment(db, registry, { sender: ME, recipientId: "them", amount: "10", idempotencyKey: key(), ...o });
-  await db.update(schema.arcPayments).set({ state, feeTxHash: state === "CREATED" ? null : `0x${k.toString(16).padStart(64, "0")}` }).where(eq(schema.arcPayments.id, p.id));
+  await db.update(schema.arcPayments).set({ state, feeBase: "300000", feeRecipient: SAFE, feeTxHash: state === "CREATED" ? null : `0x${k.toString(16).padStart(64, "0")}` }).where(eq(schema.arcPayments.id, p.id));
   return p;
 };
 const lower = (a: string) => a.toLowerCase();

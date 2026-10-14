@@ -527,7 +527,8 @@ export const CreatedArcPaymentSchema = z.object({
   amount: Money,
   fee: Money,
   total: Money,
-  feeRecipient: z.string(),
+  /** null: free payment, no fee is sent (confluence:arc-pay-free). */
+  feeRecipient: z.string().nullable(),
   usdc: z.object({ address: z.string(), decimals: z.literal(6) }),
   note: z.string().nullable(),
 });

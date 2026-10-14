@@ -10,13 +10,18 @@ import { useLeaveGuard } from "@/lib/leaveGuard";
 import { recordPaidId } from "@/lib/pay";
 
 /**
- * Pay a Confluence ID on Arc (confluence:arc-pay): two USDC transfers, fee first.
+ * Pay a Confluence ID on Arc (confluence:arc-pay).
  * 1. create the payment (the API resolves the ID and sets the fee),
- * 2. the wallet sends the fee, we wait for Arc to include it,
- * 3. the wallet sends the payment, we wait again.
+ * 2. the wallet sends the payment, we wait for Arc to include it.
+ * Arc to Arc payments are free (confluence:arc-pay-free): the API returns fee 0 and there is
+ * one transfer. A payment created earlier with a fee (fee first, then payment) can still be
+ * finished from Activity: only the payment is signed, the fee is never charged again.
  * Each transaction hash goes to the durable report outbox before anything else, so it is
- * never lost. A declined or failed payment after the fee keeps the fee: it can be finished.
+ * never lost.
  */
+
+/** Created with no Confluence fee: one transfer, no fee step. */
+export const isFreePayment = (p: Pick<CreatedArcPayment, "fee">) => p.fee.base === "0";
 
 export type PayStep = "fee" | "payment";
 export type PayPhase = "idle" | "creating" | "review" | "fee" | "payment" | "success" | "error";
@@ -94,7 +99,8 @@ export function useArcPayment() {
   const sendTransfer = useCallback(
     async (args: StartPayArgs, p: CreatedArcPayment, step: PayStep): Promise<string> => {
       const { wallet, reader } = await clients(args);
-      const to = getAddress(step === "fee" ? p.feeRecipient : p.recipient);
+      if (step === "fee" && !p.feeRecipient) throw new Error("This payment has no fee to send.");
+      const to = getAddress(step === "fee" ? p.feeRecipient! : p.recipient);
       const value = BigInt(step === "fee" ? p.fee.base : p.amount.base);
       // viem checks the wallet is on Arc before it asks (chain mismatch is refused).
       const hash = await wallet.writeContract({ address: getAddress(p.usdc.address), abi: erc20Abi, functionName: "transfer", args: [to, value] });
@@ -110,7 +116,7 @@ export function useArcPayment() {
   );
 
   const runPayment = useCallback(
-    async (args: StartPayArgs, p: CreatedArcPayment) => {
+    async (args: StartPayArgs, p: CreatedArcPayment, free = false) => {
       setState((s) => ({ ...s, phase: "payment", error: undefined }));
       try {
         await sendTransfer(args, p, "payment");
@@ -119,6 +125,27 @@ export function useArcPayment() {
       } catch (e) {
         const rejected = isRejection(e);
         if (rejected) void enqueueArcPayReport(p.id, { step: "payment", state: "error", errorMessage: "declined in wallet" });
+        if (free) {
+          // Nothing was ever paid to Confluence. A reverted transaction keeps its hash on the
+          // payment until the tracker drops it, so a new attempt starts a new payment (Back).
+          setState((s) => ({
+            ...s,
+            phase: "error",
+            confirming: false,
+            error: {
+              feePaid: false,
+              canSendPayment: rejected,
+              message: rejected
+                ? "You declined the payment in your wallet. Nothing was sent."
+                : isTimeout(e)
+                  ? "Arc hasn't confirmed your payment yet. Don't send it again: it may still go through. Check Activity in a few minutes."
+                  : (e as { reverted?: boolean }).reverted
+                    ? "The payment failed on Arc and nothing reached the recipient. Go back to try again."
+                    : `The payment did not complete. ${shortReason(e)} Check your wallet and Activity before trying again, so you don't pay twice.`,
+            },
+          }));
+          return;
+        }
         setState((s) => ({
           ...s,
           phase: "error",
@@ -191,13 +218,21 @@ export function useArcPayment() {
     setState({ phase: "review", payment: p, finishing: true });
   }, []);
 
-  /** Signs the fee, then the payment (or only the payment when finishing). */
+  /** Signs the payment (free), or the fee then the payment, or only the payment when finishing. */
   const start = useCallback(
     async () => {
       const c = ctx.current;
       if (running.current || !c) return;
       running.current = true;
       const { args, payment: p } = c;
+      if (!c.finishing && isFreePayment(p)) {
+        try {
+          await runPayment(args, p, true);
+        } finally {
+          running.current = false;
+        }
+        return;
+      }
       if (c.finishing) {
         try {
           setState((s) => ({ ...s, phase: "payment", finishing: true }));
@@ -243,13 +278,13 @@ export function useArcPayment() {
   );
 
 
-  /** After the fee is paid and the wallet declined the payment: send only the payment. */
+  /** The wallet declined the payment (nothing was sent): ask again. With a fee, the fee is not charged again. */
   const retryPayment = useCallback(async () => {
     const c = ctx.current;
     if (!c || running.current || !state.error?.canSendPayment) return;
     running.current = true;
     try {
-      await runPayment(c.args, c.payment);
+      await runPayment(c.args, c.payment, !c.finishing && isFreePayment(c.payment));
     } finally {
       running.current = false;
     }
