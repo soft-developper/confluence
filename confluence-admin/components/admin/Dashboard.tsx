@@ -19,9 +19,10 @@ import {
 } from "@/lib/adminApi";
 import { Bars, Btn, ErrorText, Field, inputCls, Panel, Stat } from "./ui";
 import { Pager, paginate } from "@/components/Pager";
+import { PayTab } from "./PayTab";
 import { RelayTab } from "./RelayTab";
 
-const TABS = ["Overview", "Activity", "Problems", "Treasury", "Chains", "Relay", "Maintenance", "Footer", "Account"] as const;
+const TABS = ["Overview", "Activity", "Pay", "Problems", "Treasury", "Chains", "Relay", "Maintenance", "Footer", "Account"] as const;
 type Tab = (typeof TABS)[number];
 
 const pct = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
@@ -73,6 +74,7 @@ export function Dashboard({ email, onSignOut }: { email: string; onSignOut: () =
       </div>
       {tab === "Overview" && <OverviewTab />}
       {tab === "Activity" && <ActivityTab />}
+      {tab === "Pay" && <PayTab />}
       {tab === "Problems" && <ProblemsTab items={problemsQ.data?.items} loading={problemsQ.isPending} />}
       {tab === "Treasury" && <TreasuryTab />}
       {tab === "Chains" && <ChainsTab />}

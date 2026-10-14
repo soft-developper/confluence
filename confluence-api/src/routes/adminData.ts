@@ -11,6 +11,8 @@ import { getHousekeeping, PRUNE_AFTER_MS } from "../housekeeping/pruneFailed.js"
 import { getDisabledChains, setChainEnabled } from "../chains/availability.js";
 import { sql } from "drizzle-orm";
 import { relayOverview } from "../relay/adminOverview.js";
+import { payList, payOverview } from "../admin/payStats.js";
+import { ARC_PAYMENT_STATES } from "../db/schema.js";
 import type { RelayUpstream } from "../relay/upstream.js";
 import { appFeeRecipient, getRelaySettings, MAX_APP_FEE_BPS, SaveRelaySettingsBody, saveRelaySettings } from "../relay/settings.js";
 
@@ -177,6 +179,29 @@ export function adminDataRouter(d: AdminDeps, registry: ChainRegistry, relayUpst
     active,
     handle(async (_req, res) => {
       res.json(await treasury(d.db, registry));
+    }),
+  );
+
+  // ---- Pay by Confluence ID (confluence:admin-pay) ----
+  router.get(
+    "/admin/pay/overview",
+    active,
+    handle(async (_req, res) => {
+      res.json(await payOverview(d.db));
+    }),
+  );
+  router.get(
+    "/admin/pay/payments",
+    active,
+    handle(async (req, res) => {
+      const q = z
+        .object({
+          q: z.string().max(100).optional(),
+          state: z.enum(ARC_PAYMENT_STATES).optional(),
+          page: z.coerce.number().int().min(1).max(100_000).default(1),
+        })
+        .parse(req.query);
+      res.json(await payList(d.db, q));
     }),
   );
 
