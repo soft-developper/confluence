@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "What Confluence collects, why, and how it is handled.",
 };
 
-const EFFECTIVE_DATE = "28 September 2026";
+const EFFECTIVE_DATE = "14 October 2026";
 const OPERATOR = "Softdeveloper";
 const CONTACT_EMAIL = "support@confluencebuild.xyz";
 
@@ -69,6 +69,14 @@ export default function PrivacyPage() {
             Signing in with your wallet (Sign-In with Ethereum) creates an account tied to your wallet address. If you
             claim a Confluence ID, it is stored with your address and is public, since other people use it to pay you.
             Confluence IDs are permanent once claimed.
+          </Item>
+          <Item label="Payments by Confluence ID">
+            When you pay a Confluence ID on the Pay page, we store the payment: your address, the ID and the wallet it
+            belongs to, the amount, any fee, its progress, any error code and the on-chain transaction hashes. If you add a
+            note, we store it with the payment and show it only to you and the person you paid; it is never shown on the
+            public transaction view. Notes are plain text, so don&rsquo;t put anything sensitive in them. If you sign in and
+            save IDs, we store the list of IDs you saved with your account. To warn you before a first payment to a new ID,
+            the app also remembers the IDs you have paid in your browser.
           </Item>
           <Item label="Address book (only if you choose to sync)">
             Saved recipient addresses and the labels you give them are kept in your browser. If you sign in and sync, a

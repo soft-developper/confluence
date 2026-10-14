@@ -1,0 +1,76 @@
+---
+title: Pay
+description: Pay anyone by their Confluence ID, from Arc or from another chain, and get paid with a link or QR code.
+---
+
+import { Callout } from "nextra/components";
+
+# Pay
+
+The **Pay** page is where you send USDC to a [Confluence ID](/products/confluence-id) like `@alice`, share your own ID to get paid, and keep track of payments. Open it from **Pay** in the app header. It has four tabs: **Send**, **Receive**, **Activity** and **Saved**.
+
+Money sent through Pay always lands on **Arc**, in the wallet the ID belongs to.
+
+## Send
+
+1. Type the recipient's ID in **To**. You can type it with or without the `@`, in any case: `@Alice` and `alice` are the same ID.
+2. Confluence checks the ID as you type and shows the wallet it belongs to, with a **Claimed ID** badge. If no one has claimed it, you can't continue.
+3. Choose where you pay **From**: Arc, or another supported chain.
+4. Enter the amount, and add a note if you like.
+5. Select **Review payment**, check the details, and confirm in your wallet.
+
+### Paying from Arc: free
+
+A payment from Arc to an ID is **free**: Confluence charges no fee. It's a single USDC transfer, straight from your wallet to the recipient's, so your wallet asks you to confirm once. You only pay Arc's network fee, which is paid in USDC.
+
+**Max** fills in your whole Arc balance, minus a small reserve of 0.05 USDC to cover that network fee.
+
+### Paying from another chain
+
+You can also pay from any chain the Bridge supports. The payment is a CCTP bridge to Arc, with the recipient's wallet as the destination. Circle's Forwarding Service delivers the USDC straight to them on Arc, so they don't need to do anything.
+
+It works like [a bridge](/products/bridge): choose **Fast** or **Standard**, check the quote, and confirm the approval and the burn in your wallet. The [bridge fee](/fees#bridge-cctp) applies, and Circle's fees are shown on the quote.
+
+### Safety checks
+
+- **First payment to an ID:** the first time you pay an ID, Pay reminds you to confirm it with the person before you send.
+- **Look-alike IDs:** if the ID looks like one you've paid or saved before (for example `@a1ice` instead of `@alice`), Pay warns you that it's a different ID. Scammers sometimes claim look-alike names.
+These are warnings, not blocks: you decide whether to continue. The one thing Pay won't do is send to your own ID.
+
+<Callout type="warning">
+  Payments can't be reversed. Check the ID and the wallet shown on the review screen before you confirm.
+</Callout>
+
+### Notes
+
+A note (up to 140 characters) travels with the payment. Only you and the person you pay can see it, in your Activity. It's never shown on the public transaction page. Notes are plain text, so don't put anything sensitive in them.
+
+## Receive
+
+Once you've [claimed an ID](/products/confluence-id#claiming-an-id), the Receive tab gives you everything you need to get paid:
+
+- **Your pay link**, like `app.confluencebuild.xyz/pay/@alice`. Anyone who opens it lands on the Pay page with your ID already filled in.
+- **A QR code** of the same link, which you can download as an image.
+- **Copy**, **Share** (on devices that support it) and **Email** buttons to send your link.
+
+People can pay your link from Arc or from any supported chain. Either way, the USDC arrives in your wallet on Arc.
+
+## Activity
+
+Activity lists payments to and from Confluence IDs, under **Sent** and **Received**:
+
+- Payments on Arc, and payments from other chains to an ID.
+- The amount, the other side's ID, the chains, the status, your note, and a link to the transaction.
+- Your totals for the current month: completed payments sent and received.
+
+A payment appears under **Sent** once you've signed it. It appears under **Received** once it's confirmed on chain. Use **Pay again** to start a new payment to the same ID.
+
+If an older payment shows **Finish payment**, its fee was paid but the payment itself wasn't sent. Finishing it sends only the payment, with no new fee.
+
+## Saved
+
+Save the IDs you pay often. Saved IDs show as quick picks when you pay, and **Pay** opens Send with the ID filled in. You can save up to 100 IDs, and only claimed IDs can be saved.
+
+<Callout type="info">
+  Receive, Activity and Saved need you to [sign in](/getting-started/sign-in) with your wallet. Send only needs a connected wallet.
+</Callout>

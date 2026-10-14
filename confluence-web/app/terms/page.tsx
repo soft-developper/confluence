@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "The terms that apply when you use Confluence.",
 };
 
-const EFFECTIVE_DATE = "9 October 2026";
+const EFFECTIVE_DATE = "14 October 2026";
 const OPERATOR = "Softdeveloper";
 const CONTACT_EMAIL = "support@confluencebuild.xyz";
 
@@ -102,6 +102,12 @@ export default function TermsPage() {
             Separately, Circle charges its own CCTP fee, and a Forwarding fee if you use Forwarding. You also pay network
             gas on the source chain, and on the destination chain if you complete a transfer yourself. Swaps have their
             own fee and a slippage limit, both shown before you confirm.
+          </P>
+          <P>
+            <B>Payments to a Confluence ID on Arc</B>, sent from Arc on the Pay page, are currently free: Confluence charges
+            no fee on them. You pay only the Arc network fee, in USDC. We may introduce a fee in the future; any fee will be
+            shown before you confirm and will never apply to a payment you have already confirmed. Payments to an ID sent
+            from another chain are bridges and carry the bridge fee above.
           </P>
           <P>
             <B>Relay routes</B> carry a Confluence app fee in basis points of the input value, shown on the quote (0.01% by

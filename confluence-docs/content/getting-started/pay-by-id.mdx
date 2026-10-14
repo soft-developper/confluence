@@ -1,35 +1,39 @@
 ---
 title: Pay someone by @ID
-description: Send USDC to a Confluence ID instead of a long address.
+description: Send USDC to a Confluence ID instead of a long address. Free from Arc.
 ---
 
 import { Callout, Steps } from "nextra/components";
 
 # Pay someone by @ID
 
-If someone has a Confluence ID, you can send them USDC using their name instead of their wallet address.
+If someone has a Confluence ID, you can send them USDC using their name instead of their wallet address. The money arrives in their wallet on Arc.
 
 <Steps>
 
-### Start a bridge
+### Open Pay
 
-On the **Bridge** page, choose the chains and enter the amount, as in [your first bridge](/getting-started/first-bridge).
+Select **Pay** in the app header, then **Connect wallet** if you haven't already. If someone sent you their pay link, open it: their ID is already filled in.
 
-### Turn on Send to another address
+### Enter their ID
 
-In the recipient field, type their ID with the `@` in front, for example `@alice`.
+In **To**, type their ID, for example `alice` or `@alice`. Confluence checks it as you type and shows the wallet it belongs to. If no one has claimed the ID, you can't continue.
 
-### Check it resolves
+### Choose where you pay from
 
-Confluence looks up the ID and shows the wallet it belongs to. If the ID doesn't exist, you'll see **Unknown Confluence ID** and can't continue.
+Leave **From** on **Arc** to pay for free with a single transfer. Or pick another chain to pay from there: it's a bridge to Arc, and the bridge fee applies.
+
+### Enter the amount
+
+Type the amount, or use **Max**. Add a note if you like: only you and the recipient can see it.
 
 ### Review and confirm
 
-The review screen shows `@alice` as the recipient. Confirm in your wallet as usual.
+Select **Review payment**, check the ID, wallet and amount, then confirm in your wallet. From Arc, your wallet asks once.
 
 </Steps>
 
-The USDC arrives in their wallet on the destination chain you chose, and the payment shows up in both of your histories.
+The payment shows up in your **Activity** on the Pay page, and in theirs once it's confirmed on Arc. See [Pay](/products/pay) for everything the Pay page can do.
 
 <Callout type="info">
   Make sure you have the right ID before confirming. Like any blockchain transfer, a payment to the wrong person can't be reversed.

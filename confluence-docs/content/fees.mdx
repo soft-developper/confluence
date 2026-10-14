@@ -42,6 +42,15 @@ These are shown separately on the quote and aren't Confluence fees:
 - **Forwarding fee (when Forwarding is on):** Circle's fee for delivering the mint on the destination chain. It's taken from the amount that arrives, so the quote's **expected receive** already accounts for it.
 - **Network gas:** paid by your wallet on the source chain for the approval and the burn, and on the destination chain if you complete a mint yourself. On Arc, gas is paid in USDC.
 
+## Pay by Confluence ID
+
+| How you pay | Confluence fee |
+| --- | --- |
+| From Arc to an ID | **Free** |
+| From another chain to an ID | The [bridge fee](#bridge-cctp) above |
+
+A payment from Arc is a single USDC transfer straight to the recipient: you only pay Arc's network fee, in USDC. A payment from another chain is a CCTP bridge to Arc, so it has the bridge fee and Circle's costs, all shown on the quote.
+
 ## Swap
 
 Confluence's swap fee follows the same rule, applied to the token the fee is taken in (shown on the quote):
