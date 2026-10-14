@@ -15,7 +15,7 @@ import { useDebounced } from "@/hooks/useDebounced";
 import { useUsdcBalance } from "@/hooks/useUsdcBalance";
 import { useIdRecipient } from "@/hooks/useIdRecipient";
 import { useArcPayment } from "@/hooks/useArcPayment";
-import { addSavedId, fetchMaxAmount, fetchSavedIds, postQuote, quoteErrorText, SessionExpiredError, type Quote } from "@/lib/api";
+import { addSavedId, fetchMaxAmount, fetchSavedIds, postQuote, quoteErrorText, SessionExpiredError, type Quote, type ResumedArcPayment } from "@/lib/api";
 import { shortAddress, type BridgeChain } from "@/lib/chains";
 import { avatarFor, loadPaidIds, lookalikeId, previewFeeBase, recordPaidId } from "@/lib/pay";
 import { clearSession, useSession } from "@/lib/session";
@@ -102,7 +102,14 @@ function RecipientCard({ handle, address }: { handle: string; address: string })
   );
 }
 
-export function PayView() {
+export interface FinishRequest {
+  resumed: ResumedArcPayment;
+  feeUsdc: string;
+  /** Changes on every request, so the same payment can be opened again. */
+  nonce: number;
+}
+
+export function PayView({ prefill, finishRequest }: { prefill?: { handle: string; nonce: number }; finishRequest?: FinishRequest } = {}) {
   const { chains, byEvmId } = useBridgeChains();
   const arc = useMemo(() => chains.find((c) => isArc(c) && c.bridgeEnabled), [chains]);
   const { address, chainId, status, connector } = useConnection();
@@ -117,6 +124,25 @@ export function PayView() {
   const [note, setNote] = useState("");
   const pay = useArcPayment();
   const phase = pay.state.phase;
+
+  // From Saved IDs or Activity: "Pay @name" starts a fresh payment to that ID. A finished or
+  // stopped payment screen is cleared; one still in progress is never interrupted (reset() and
+  // the cross-chain exit both refuse while signing is under way).
+  const resetArc = pay.reset;
+  const prefillSeen = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!prefill || prefillSeen.current === prefill.nonce) return;
+    prefillSeen.current = prefill.nonce;
+    resetArc();
+    setTo(prefill.handle);
+  }, [prefill, resetArc]);
+  // From Activity: "Finish payment" opens the review of that payment, fee already paid.
+  const startFinish = pay.finish;
+  useEffect(() => {
+    const a = chains.find((c) => (c.id === "Arc" || c.id === "Arc_Testnet") && c.bridgeEnabled);
+    if (!finishRequest || !a || !address || !connector) return;
+    startFinish({ arc: a, sender: address, getProvider: () => connector.getProvider() }, finishRequest.resumed, finishRequest.feeUsdc);
+  }, [finishRequest, chains, address, connector, startFinish]);
 
   // From: the wallet's chain by default (until picked), Arc when the wallet is elsewhere.
   const pickable = useMemo(() => chains.filter((c) => c.bridgeEnabled), [chains]);
@@ -140,6 +166,15 @@ export function PayView() {
   const usedQuoteIds = useRef(new Set<string>());
   const [speed, setSpeed] = useState<"FAST" | "SLOW">("FAST");
   const fastAvailable = !!from?.speed?.fast;
+  const execBusy = exec.busy;
+  const resetExec = exec.reset;
+  useEffect(() => {
+    if (!prefill || execBusy) return;
+    resetExec();
+    setFrozenQuote(null);
+    setReviewing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
 
   const text = to.trim() ? `@${to.trim().replace(/^@+/, "")}` : "";
   const id = useIdRecipient(text);
@@ -345,6 +380,9 @@ export function PayView() {
             : undefined
         }
         saved={!!savedQ.data?.some((s) => s.handle === p.recipientId)}
+        onArc={chainId === arc.evmChainId}
+        switching={switching}
+        onSwitch={() => switchChain({ chainId: arc.evmChainId })}
       />
     );
   }
@@ -667,6 +705,9 @@ function ReviewAndProgress({
   onBack,
   onSave,
   saved,
+  onArc,
+  switching,
+  onSwitch,
 }: {
   arc: BridgeChain;
   state: ReturnType<typeof useArcPayment>["state"];
@@ -676,13 +717,18 @@ function ReviewAndProgress({
   onBack: () => void;
   onSave?: () => Promise<void>;
   saved: boolean;
+  /** The wallet is on Arc (signing on another chain is refused). */
+  onArc: boolean;
+  switching: boolean;
+  onSwitch: () => void;
 }) {
   const p = state.payment!;
-  const { phase, error, feeTx, payTx, confirming } = state;
+  const { phase, error, feeTx, payTx, confirming, finishing } = state;
   const [saving, setSaving] = useState<"idle" | "busy" | "done" | "error">("idle");
 
-  const feeStatus: StepStatus =
-    phase === "review" ? "waiting" : phase === "fee" ? (confirming ? "confirming" : "active") : phase === "error" && !error?.feePaid ? "error" : "done";
+  const feeStatus: StepStatus = finishing
+    ? "done"
+    : phase === "review" ? "waiting" : phase === "fee" ? (confirming ? "confirming" : "active") : phase === "error" && !error?.feePaid ? "error" : "done";
   const payStatus: StepStatus =
     phase === "success" ? "done" : phase === "payment" ? (confirming ? "confirming" : "active") : phase === "error" && error?.feePaid ? "error" : "waiting";
 
@@ -705,7 +751,7 @@ function ReviewAndProgress({
         </div>
       ) : (
         <h1 id="pay-review-title" className="text-[22px] font-medium">
-          {phase === "review" ? "Review payment" : phase === "error" ? "Payment not completed" : "Paying..."}
+          {phase === "review" ? (finishing ? "Finish payment" : "Review payment") : phase === "error" ? "Payment not completed" : "Paying..."}
         </h1>
       )}
 
@@ -713,9 +759,9 @@ function ReviewAndProgress({
 
       <div className="flex flex-col gap-2 rounded-md border border-border p-3">
         <Row label="Recipient gets" value={`${fmt(p.amount.usdc)} USDC`} />
-        <Row label="Confluence fee" value={`${fmt(p.fee.usdc)} USDC`} />
+        <Row label="Confluence fee" value={finishing ? `${fmt(p.fee.usdc)} USDC, paid earlier` : `${fmt(p.fee.usdc)} USDC`} />
         <div className="border-t border-border pt-2">
-          <Row label="Total from your wallet" value={`${fmt(p.total.usdc)} USDC`} strong />
+          <Row label={finishing ? "To send now" : "Total from your wallet"} value={`${fmt(p.total.usdc)} USDC`} strong />
         </div>
         {p.note && (
           <div className="flex flex-col gap-0.5 border-t border-border pt-2">
@@ -728,8 +774,8 @@ function ReviewAndProgress({
 
       {phase !== "success" && (
         <div className="flex flex-col gap-3">
-          <span className="text-[13px] text-ink-muted">Your wallet asks you to confirm twice:</span>
-          <StepLine n={1} title={`Fee: ${fmt(p.fee.usdc)} USDC to Confluence`} sub="Sent first." status={feeStatus} href={feeTx ? explorer(feeTx) : undefined} />
+          <span className="text-[13px] text-ink-muted">{finishing ? "Your fee is already paid. Your wallet asks you to confirm once:" : "Your wallet asks you to confirm twice:"}</span>
+          <StepLine n={1} title={`Fee: ${fmt(p.fee.usdc)} USDC to Confluence`} sub={finishing ? "Paid earlier." : "Sent first."} status={feeStatus} href={feeTx ? explorer(feeTx) : undefined} />
           <StepLine n={2} title={`Payment: ${fmt(p.amount.usdc)} USDC to @${p.recipientId}`} sub={`Straight to ${shortAddress(p.recipient)}.`} status={payStatus} href={payTx ? explorer(payTx) : undefined} />
         </div>
       )}
@@ -747,13 +793,26 @@ function ReviewAndProgress({
 
       {phase === "review" && (
         <div className="flex flex-col gap-2">
-          <Primary onClick={onConfirm}>Pay @{p.recipientId}</Primary>
+          {onArc ? (
+            <Primary onClick={onConfirm}>{finishing ? `Send ${fmt(p.amount.usdc)} USDC to @${p.recipientId}` : `Pay @${p.recipientId}`}</Primary>
+          ) : (
+            <Primary onClick={onSwitch} disabled={switching}>
+              {switching ? "Switching..." : `Switch to ${arc.name}`}
+            </Primary>
+          )}
           <Secondary onClick={onBack}>Back</Secondary>
         </div>
       )}
       {phase === "error" && (
         <div className="flex flex-col gap-2">
-          {error?.canSendPayment && <Primary onClick={onRetryPayment}>Send payment now (no new fee)</Primary>}
+          {error?.canSendPayment &&
+            (onArc ? (
+              <Primary onClick={onRetryPayment}>Send payment now (no new fee)</Primary>
+            ) : (
+              <Primary onClick={onSwitch} disabled={switching}>
+                {switching ? "Switching..." : `Switch to ${arc.name}`}
+              </Primary>
+            ))}
           <Secondary onClick={onBack}>{error?.feePaid ? "Done" : "Back"}</Secondary>
         </div>
       )}

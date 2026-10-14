@@ -601,3 +601,52 @@ export async function removeSavedId(token: string, handle: string): Promise<Save
   const j = await (await authed(token, "/me/saved-ids/remove", { method: "POST", body: JSON.stringify({ handle }) })).json();
   return z.object({ ids: z.array(SavedIdSchema) }).parse(j).ids;
 }
+
+// ---------- Pay Activity (confluence:arc-pay) ----------
+
+export const PayActivityItemSchema = z.object({
+  kind: z.enum(["arc", "bridge"]),
+  id: z.string(),
+  direction: z.enum(["sent", "received"]),
+  counterpartyId: z.string().nullable(),
+  counterparty: z.string(),
+  amount: z.string(),
+  fee: z.string().nullable(),
+  sourceChain: z.string(),
+  destinationChain: z.string(),
+  state: z.string(),
+  errorCode: z.string().nullable(),
+  note: z.string().nullable(),
+  txHash: z.string().nullable(),
+  canFinish: z.boolean(),
+  createdAt: z.string(),
+});
+export type PayActivityItem = z.infer<typeof PayActivityItemSchema>;
+
+export async function fetchPayActivity(token: string, direction: "sent" | "received", page: number) {
+  const j = await (await authed(token, `/me/pay/activity?direction=${direction}&page=${page}`)).json();
+  return z
+    .object({ items: z.array(PayActivityItemSchema), page: z.number(), pageSize: z.number(), total: z.number(), totalPages: z.number() })
+    .parse(j);
+}
+
+export async function fetchPayTotals(token: string) {
+  const j = await (await authed(token, "/me/pay/totals")).json();
+  return z.object({ since: z.string(), sent: z.string(), received: z.string() }).parse(j);
+}
+
+export const ResumedArcPaymentSchema = z.object({
+  id: z.string(),
+  reportToken: z.string(),
+  state: z.string(),
+  recipient: z.string(),
+  recipientId: z.string(),
+  amount: Money,
+});
+export type ResumedArcPayment = z.infer<typeof ResumedArcPaymentSchema>;
+
+/** A fresh signing token for finishing a payment whose fee is paid (sender only). */
+export async function resumeArcPayment(token: string, id: string): Promise<ResumedArcPayment> {
+  const j = await (await authed(token, `/me/arc-payments/${encodeURIComponent(id)}/resume`, { method: "POST", body: "{}" })).json();
+  return ResumedArcPaymentSchema.parse(j);
+}

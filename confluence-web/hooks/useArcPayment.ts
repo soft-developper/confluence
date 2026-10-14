@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { createPublicClient, createWalletClient, custom, erc20Abi, fallback, getAddress, http, type EIP1193Provider } from "viem";
-import { arcPayErrorText, postArcPayment, type CreatedArcPayment } from "@/lib/api";
+import { arcPayErrorText, postArcPayment, type CreatedArcPayment, type ResumedArcPayment } from "@/lib/api";
 import { toViemChain, type BridgeChain } from "@/lib/chains";
 import { enqueueArcPayReport } from "@/lib/reportOutbox";
 import { saveTransferToken } from "@/lib/transferToken";
@@ -41,6 +41,8 @@ function isTimeout(e: unknown): boolean {
 export interface PayState {
   phase: PayPhase;
   payment?: CreatedArcPayment;
+  /** Finishing an earlier payment: the fee is already paid, only the payment is signed. */
+  finishing?: boolean;
   feeTx?: string;
   payTx?: string;
   /** Waiting for Arc to include a sent transaction. */
@@ -75,7 +77,7 @@ export interface StartPayArgs {
 export function useArcPayment() {
   const [state, setState] = useState<PayState>({ phase: "idle" });
   const running = useRef(false);
-  const ctx = useRef<{ args: StartPayArgs; payment: CreatedArcPayment } | null>(null);
+  const ctx = useRef<{ args: StartPayArgs; payment: CreatedArcPayment; finishing?: boolean } | null>(null);
   const busy = state.phase === "creating" || state.phase === "fee" || state.phase === "payment";
   // Leaving mid-payment loses the live progress (funds stay safe), so ask first.
   useLeaveGuard(busy);
@@ -163,13 +165,48 @@ export function useArcPayment() {
     }
   }, []);
 
-  /** Signs the fee, then the payment. */
+  /**
+   * Finish an earlier payment whose fee is paid (from Activity): shows it for review with
+   * the fee marked done; confirming signs only the payment. Never charges the fee again.
+   */
+  const finish = useCallback((args: Omit<StartPayArgs, "recipientId" | "amount" | "note">, r: ResumedArcPayment, feeUsdc: string) => {
+    if (running.current) return;
+    saveTransferToken(r.id, r.reportToken);
+    const p: CreatedArcPayment = {
+      id: r.id,
+      reportToken: r.reportToken,
+      state: r.state,
+      chain: args.arc.id,
+      sender: args.sender,
+      recipient: r.recipient,
+      recipientId: r.recipientId,
+      amount: r.amount,
+      fee: { base: "0", usdc: feeUsdc },
+      total: r.amount,
+      feeRecipient: r.recipient, // unused: the fee is not sent again
+      usdc: { address: args.arc.usdcAddress, decimals: 6 },
+      note: null,
+    };
+    ctx.current = { args: { ...args, recipientId: r.recipientId, amount: r.amount.usdc }, payment: p, finishing: true };
+    setState({ phase: "review", payment: p, finishing: true });
+  }, []);
+
+  /** Signs the fee, then the payment (or only the payment when finishing). */
   const start = useCallback(
     async () => {
       const c = ctx.current;
       if (running.current || !c) return;
       running.current = true;
       const { args, payment: p } = c;
+      if (c.finishing) {
+        try {
+          setState((s) => ({ ...s, phase: "payment", finishing: true }));
+          await runPayment(args, p);
+        } finally {
+          running.current = false;
+        }
+        return;
+      }
       try {
         setState({ phase: "fee", payment: p });
 
@@ -224,5 +261,5 @@ export function useArcPayment() {
     setState({ phase: "idle" });
   }, []);
 
-  return { state, busy, prepare, start, retryPayment, reset };
+  return { state, busy, prepare, finish, start, retryPayment, reset };
 }
