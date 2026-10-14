@@ -422,3 +422,66 @@ export const relayRequests = sqliteTable(
   },
   (t) => [index("relay_requests_user_idx").on(t.userAddress), index("relay_requests_status_idx").on(t.status)],
 );
+
+/**
+ * Pay by Confluence ID, Arc to Arc (confluence:arc-pay). CCTP cannot move USDC within one
+ * chain, so these are two plain USDC transfers on Arc, fee first: the platform fee to the
+ * fee recipient, then the payment to the ID's wallet. Browser reports only reach the
+ * *_SUBMITTED states; the tracker proves each transfer from its receipt before FEE_PAID or
+ * COMPLETED. A paid fee is never lost: FEE_PAID never expires, so the payment can be
+ * finished later.
+ */
+export const ARC_PAYMENT_STATES = ["CREATED", "FEE_SUBMITTED", "FEE_PAID", "PAYMENT_SUBMITTED", "COMPLETED", "FAILED", "EXPIRED"] as const;
+export type ArcPaymentState = (typeof ARC_PAYMENT_STATES)[number];
+
+export const arcPayments = sqliteTable(
+  "arc_payments",
+  {
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    state: text("state", { enum: ARC_PAYMENT_STATES }).notNull().default("CREATED"),
+    /** Registry id of the Arc chain in this environment ("Arc" or "Arc_Testnet"). */
+    chain: text("chain").notNull(),
+    sender: text("sender").notNull(),
+    /** Wallet the Confluence ID resolved to when the payment was created. */
+    recipient: text("recipient").notNull(),
+    recipientId: text("recipient_id").notNull(),
+    amountBase: text("amount_base").notNull(),
+    feeBase: text("fee_base").notNull(),
+    feeRecipient: text("fee_recipient").notNull(),
+    /** Optional plain-text note from the sender, shown only to the two sides. */
+    note: text("note"),
+    feeTxHash: text("fee_tx_hash"),
+    payTxHash: text("pay_tx_hash"),
+    feeVerifiedAt: integer("fee_verified_at", { mode: "timestamp_ms" }),
+    payVerifiedAt: integer("pay_verified_at", { mode: "timestamp_ms" }),
+    errorCode: text("error_code"),
+    // sha256 of the secret report token returned once on create (same scheme as transfers).
+    reportTokenHash: text("report_token_hash"),
+    trackedAt: integer("tracked_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('subsec') * 1000)`),
+  },
+  (t) => [
+    uniqueIndex("arc_payments_idempotency_key_uq").on(t.idempotencyKey),
+    uniqueIndex("arc_payments_fee_tx_hash_uq").on(t.feeTxHash),
+    uniqueIndex("arc_payments_pay_tx_hash_uq").on(t.payTxHash),
+    index("arc_payments_state_idx").on(t.state),
+    index("arc_payments_sender_lower_idx").on(sql`lower("sender")`),
+    index("arc_payments_recipient_lower_idx").on(sql`lower("recipient")`),
+  ],
+);
+
+export const arcPaymentEvents = sqliteTable(
+  "arc_payment_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    paymentId: text("payment_id").notNull().references(() => arcPayments.id),
+    fromState: text("from_state", { enum: ARC_PAYMENT_STATES }),
+    toState: text("to_state", { enum: ARC_PAYMENT_STATES }).notNull(),
+    source: text("source", { enum: ["worker", "client", "admin"] }).notNull(),
+    detail: text("detail", { mode: "json" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("arc_payment_events_payment_idx").on(t.paymentId)],
+);

@@ -7,6 +7,7 @@ import { isNonceUsed } from "./chainReads.js";
 import { decide, recheckAfterMs, STOP_CODES, verifyMessage, type Decision } from "./decide.js";
 import { trackSwapsOnce, type SwapStatusFn } from "./swaps.js";
 import { checkSourceBurnsOnce } from "./sourceBurn.js";
+import { trackArcPaymentsOnce } from "../arcPay/service.js";
 import type { SwapRegistry } from "../swaps/tokens.js";
 
 export interface TrackerDeps {
@@ -170,6 +171,8 @@ export function startTracker(deps: TrackerDeps, intervalMs: number): () => void 
       // Source-chain burn proof first, so a fresh burn shows in history within one pass.
       const b = await checkSourceBurnsOnce({ db: deps.db, registry: deps.registry, fetchImpl: deps.fetchImpl, log });
       if (b.checked > 0) log(`tracker: source burns checked ${b.checked}, proven ${b.proven}, rejected ${b.rejected}, errors ${b.errors}`);
+      const ap = await trackArcPaymentsOnce({ db: deps.db, registry: deps.registry, fetchImpl: deps.fetchImpl, log });
+      if (ap.moved > 0 || ap.errors > 0) log(`tracker: arc payments checked ${ap.checked}, moved ${ap.moved}, errors ${ap.errors}`);
       const r = await trackOnce({ ...deps, log });
       if (r.checked > 0) log(`tracker: pass checked ${r.checked}, moved ${r.moved}, errors ${r.errors}`);
       if (deps.getSwapStatus) {

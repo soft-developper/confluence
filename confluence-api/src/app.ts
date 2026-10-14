@@ -9,6 +9,7 @@ import { quotesRouter } from "./routes/quotes.js";
 import { feesRouter } from "./routes/fees.js";
 import { REPORT_TOKEN_HEADER, transfersRouter } from "./routes/transfers.js";
 import { swapsRouter } from "./routes/swaps.js";
+import { arcPaymentsRouter } from "./routes/arcPayments.js";
 import { accountRouter } from "./routes/account.js";
 import { siteRouter } from "./routes/site.js";
 import { adminRouter } from "./routes/admin.js";
@@ -78,6 +79,8 @@ export function createApp(
   app.use(healthRouter(config, db));
   app.use(chainsRouter(config, registry, db));
   app.use(quotesRouter(db, registry, iris));
+  // Pay by Confluence ID on Arc (confluence:arc-pay).
+  app.use(arcPaymentsRouter(db, registry));
   app.use(feesRouter());
   app.use(transfersRouter(db));
   app.use(swapsRouter(db, swapRegistry));

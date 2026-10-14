@@ -89,6 +89,8 @@ export interface TxReceipt {
   status: string;
   from: string;
   logs: { address: string; topics: string[]; data: string }[];
+  /** Hex block number; absent only in hand-built test receipts. */
+  blockNumber?: string;
 }
 
 /** A transaction receipt (confluence:source-burn-proof). null when the node does not know it yet. */
@@ -102,5 +104,13 @@ export async function getReceipt(rpcUrls: readonly string[], txHash: string, fet
     topics: Array.isArray(l.topics) ? l.topics.map(String) : [],
     data: typeof l.data === "string" ? l.data : "0x",
   }));
-  return { status: r.status.toLowerCase(), from: r.from, logs };
+  return { status: r.status.toLowerCase(), from: r.from, logs, ...(typeof r.blockNumber === "string" ? { blockNumber: r.blockNumber } : {}) };
+}
+
+/** A block's timestamp in milliseconds (confluence:arc-pay). Throws when no endpoint answers. */
+export async function getBlockTimeMs(rpcUrls: readonly string[], blockNumber: string, fetchImpl: typeof fetch = fetch): Promise<number> {
+  if (!/^0x[0-9a-fA-F]+$/.test(blockNumber)) throw new Error("block number is not hex");
+  const b = (await rpc(rpcUrls, "eth_getBlockByNumber", [blockNumber, false], fetchImpl)) as { timestamp?: unknown } | null;
+  if (!b || typeof b.timestamp !== "string") throw new Error("RPC returned no block");
+  return Number(BigInt(b.timestamp)) * 1000;
 }

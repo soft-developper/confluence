@@ -81,6 +81,8 @@ export async function setMaintenance(db: Db, input: z.infer<typeof SetSwitchBody
 const GUARDED: { method: string; path: string; protocol: Protocol }[] = [
   { method: "POST", path: "/quotes", protocol: "bridge" },
   { method: "POST", path: "/transfers", protocol: "bridge" },
+  // Pay by ID on Arc moves USDC like a bridge, so the Bridge switch covers it (confluence:arc-pay).
+  { method: "POST", path: "/arc-payments", protocol: "bridge" },
   { method: "POST", path: "/swaps", protocol: "swap" },
   { method: "POST", path: "/swaps/fee", protocol: "swap" },
 ];
