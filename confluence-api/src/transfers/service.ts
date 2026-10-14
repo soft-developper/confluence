@@ -73,6 +73,7 @@ export async function createTransfer(db: Db, input: CreateTransferInput) {
         sender: quote.sender,
         recipient: quote.recipient,
         recipientId: quote.recipientId,
+        note: quote.note,
         amountBase: quote.amountBase,
         platformFeeBase: quote.platformFeeBase,
         speed: quote.speed,

@@ -10,6 +10,7 @@ import { activeFeeRecipient } from "../fees/quote.js";
 import { calculatePlatformFee } from "../fees/platformFee.js";
 import { formatUsdc, parseUsdc } from "../lib/usdc.js";
 import { getBlockTimeMs, getReceipt } from "../tracker/chainReads.js";
+import { cleanNote, NOTE_MAX, NoteError } from "./note.js";
 import { applyReport, checkUsdcTransfer, decideArcPayment, EXPIRE_AFTER_MS, tooOld, type ArcPayStep, type ArcPayStepState, type TransferCheck } from "./rules.js";
 
 /**
@@ -29,7 +30,6 @@ export class ArcPayError extends Error {
   }
 }
 
-export const NOTE_MAX = 140;
 export const MAX_EVENTS_PER_PAYMENT = 50;
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -57,14 +57,15 @@ export function arcChain(registry: ChainRegistry): BridgeChain | undefined {
   return registry.chains.find((c) => c.id === "Arc" || c.id === "Arc_Testnet");
 }
 
-/** Plain text only: trimmed, one line, no control characters, at most NOTE_MAX characters. */
-export function cleanNote(raw: string | undefined): string | null {
-  if (raw === undefined) return null;
-  // eslint-disable-next-line no-control-regex
-  const s = raw.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!s) return null;
-  if ([...s].length > NOTE_MAX) throw new ArcPayError(400, "note_too_long", `the note can be at most ${NOTE_MAX} characters`);
-  return s;
+export { NOTE_MAX };
+
+function noteOrThrow(raw: string | undefined): string | null {
+  try {
+    return cleanNote(raw);
+  } catch (e) {
+    if (e instanceof NoteError) throw new ArcPayError(400, e.code, e.message);
+    throw e;
+  }
 }
 
 export interface CreateArcPaymentInput {
@@ -101,7 +102,7 @@ export async function createArcPayment(db: Db, registry: ChainRegistry, input: C
   const feeRecipient = await activeFeeRecipient(db, arc.id);
   if (!feeRecipient) throw new ArcPayError(503, "fee_recipient_not_configured", `no fee recipient configured for ${arc.id}`);
   const fee = calculatePlatformFee(amount);
-  const note = cleanNote(input.note);
+  const note = noteOrThrow(input.note);
 
   const id = randomUUID();
   const token = randomBytes(32).toString("base64url");

@@ -9,6 +9,7 @@ import type { Db } from "../db/client.js";
 import { accounts, feeRecipients, quotes } from "../db/schema.js";
 import { formatUsdc, mulDivCeil, parseUsdc } from "../lib/usdc.js";
 import { calculatePlatformFee, netPlatformFee } from "./platformFee.js";
+import { cleanNote, NoteError } from "../arcPay/note.js";
 
 export const QUOTE_TTL_MS = 60_000;
 
@@ -20,6 +21,8 @@ export interface QuoteInput {
   recipient?: string | undefined;
   /** Stage 8a: pay a Confluence ID; resolved here, never trusted from the browser. */
   recipientId?: string | undefined;
+  /** Optional note for a payment to a Confluence ID (confluence:arc-pay). */
+  note?: string | undefined;
   speed: "FAST" | "SLOW";
   useForwarder: boolean;
 }
@@ -111,6 +114,16 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     recipient = getAddress(acct.address);
     recipientId = handle;
   }
+  let note: string | null = null;
+  if (input.note !== undefined) {
+    if (!recipientId) throw new QuoteError(400, "note_needs_id", "a note can only be added when paying a Confluence ID");
+    try {
+      note = cleanNote(input.note);
+    } catch (e) {
+      if (e instanceof NoteError) throw new QuoteError(400, e.code, e.message);
+      throw e;
+    }
+  }
 
   await db.insert(quotes).values({
     id,
@@ -119,6 +132,7 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     sender: input.sender,
     recipient,
     recipientId,
+    note,
     amountBase: amount.toString(),
     platformFeeBase: platformFee.toString(),
     cctpFeeBase: cctpFee.toString(),
@@ -137,6 +151,7 @@ export async function createQuote(db: Db, registry: ChainRegistry, iris: IrisCli
     sender: input.sender,
     recipient,
     recipientId,
+    note,
     speed: input.speed,
     useForwarder: input.useForwarder,
     eta: (input.speed === "FAST" ? source.speed?.fast : source.speed?.standard)?.label ?? null,

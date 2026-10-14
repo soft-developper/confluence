@@ -37,6 +37,8 @@ export const quotes = sqliteTable(
     recipient: text("recipient").notNull(),
     // Stage 8a: the Confluence ID the payer chose; the API resolved it to `recipient`.
     recipientId: text("recipient_id"),
+    // Pay by ID (confluence:arc-pay): optional plain-text note, only with a recipient ID.
+    note: text("note"),
     amountBase: text("amount_base").notNull(),
     platformFeeBase: text("platform_fee_base").notNull(),
     cctpFeeBase: text("cctp_fee_base").notNull(),
@@ -64,6 +66,8 @@ export const transfers = sqliteTable(
     recipient: text("recipient").notNull(),
     // Stage 8a: copied from the quote.
     recipientId: text("recipient_id"),
+    // Pay by ID (confluence:arc-pay): optional plain-text note, only with a recipient ID.
+    note: text("note"),
     amountBase: text("amount_base").notNull(),
     platformFeeBase: text("platform_fee_base").notNull(),
     speed: text("speed", { enum: TRANSFER_SPEEDS }).notNull(),
@@ -484,4 +488,18 @@ export const arcPaymentEvents = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("arc_payment_events_payment_idx").on(t.paymentId)],
+);
+
+/**
+ * Saved Confluence IDs per wallet (confluence:saved-ids): quick picks on the Pay page.
+ * Only claimed IDs can be saved; the address is looked up live, never stored here.
+ */
+export const savedIds = sqliteTable(
+  "saved_ids",
+  {
+    owner: text("owner").notNull(), // lowercase wallet address
+    handle: text("handle").notNull(), // lowercase Confluence ID
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.owner, t.handle] })],
 );
