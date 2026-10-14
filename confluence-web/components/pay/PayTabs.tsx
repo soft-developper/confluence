@@ -24,17 +24,19 @@ import {
 import { shortAddress } from "@/lib/chains";
 import { clearSession, useSession } from "@/lib/session";
 import { IdAvatar, PayView, type FinishRequest } from "./PayView";
+import { ReceiveCard } from "./ReceiveCard";
 
 /**
  * Pay page (confluence:arc-pay): Send, Activity and Saved IDs. Sending never needs a
  * sign-in; Activity and Saved IDs are private, so they ask for one.
  */
 
-type Tab = "send" | "activity" | "saved";
+type Tab = "send" | "receive" | "activity" | "saved";
 const TABS: { id: Tab; label: string }[] = [
   { id: "send", label: "Send" },
+  { id: "receive", label: "Receive" },
   { id: "activity", label: "Activity" },
-  { id: "saved", label: "Saved IDs" },
+  { id: "saved", label: "Saved" },
 ];
 
 function fmt(usdc: string): string {
@@ -94,7 +96,7 @@ function SignedInOnly({ what, children }: { what: string; children: (token: stri
   if (status !== "connected" || !address) {
     return (
       <Card title={what}>
-        <p className="text-sm text-ink-muted">Connect your wallet to see your {what.toLowerCase()}.</p>
+        <p className="text-sm text-ink-muted">{what === "Receive" ? "Connect your wallet to get your pay link and QR code." : `Connect your wallet to see your ${what.toLowerCase()}.`}</p>
         <Primary onClick={() => setConnectOpen(true)}>Connect wallet</Primary>
         <ConnectModal open={connectOpen} onClose={closeConnect} />
       </Card>
@@ -104,7 +106,7 @@ function SignedInOnly({ what, children }: { what: string; children: (token: stri
     return (
       <Card title={what}>
         <p className="text-sm text-ink-muted">
-          Your {what.toLowerCase()} are private. Sign a message with {shortAddress(address)} to prove it is yours: a free signature, not a transaction.
+          {what === "Receive" ? "To show your Confluence ID and pay link, sign" : `Your ${what.toLowerCase()} are private. Sign`} a message with {shortAddress(address)} to prove it is yours: a free signature, not a transaction.
           Sending a payment never needs this.
         </p>
         {error && (
@@ -121,9 +123,10 @@ function SignedInOnly({ what, children }: { what: string; children: (token: stri
   return <>{children(session.token, address)}</>;
 }
 
-export function PayTabs() {
+/** `initialHandle`: opened from a pay link (/pay/@name), so Send starts filled in. */
+export function PayTabs({ initialHandle }: { initialHandle?: string } = {}) {
   const [tab, setTab] = useState<Tab>("send");
-  const [prefill, setPrefill] = useState<{ handle: string; nonce: number } | undefined>(undefined);
+  const [prefill, setPrefill] = useState<{ handle: string; nonce: number } | undefined>(initialHandle ? { handle: initialHandle, nonce: 1 } : undefined);
   const [finishRequest, setFinishRequest] = useState<FinishRequest | undefined>(undefined);
 
   const payId = (handle: string) => {
@@ -133,7 +136,7 @@ export function PayTabs() {
 
   return (
     <div className="flex w-full max-w-[460px] flex-col gap-3">
-      <div role="tablist" aria-label="Pay" className="grid grid-cols-3 gap-1 self-center rounded-md border border-border bg-surface p-1">
+      <div role="tablist" aria-label="Pay" className="grid grid-cols-4 gap-1 self-stretch rounded-md border border-border bg-surface p-1 min-[400px]:self-center">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -141,7 +144,7 @@ export function PayTabs() {
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`h-9 rounded-[4px] px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text ${
+            className={`h-9 rounded-[4px] px-2 text-sm font-medium transition-colors min-[400px]:px-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text ${
               tab === t.id ? "bg-action text-on-action" : "text-ink-muted hover:text-ink"
             }`}
           >
@@ -156,6 +159,7 @@ export function PayTabs() {
           <PayView prefill={prefill} finishRequest={finishRequest} />
         </MaintenanceGate>
       </div>
+      {tab === "receive" && <SignedInOnly what="Receive">{(token, address) => <ReceiveCard token={token} address={address} />}</SignedInOnly>}
       {tab === "activity" && (
         <SignedInOnly what="Activity">
           {(token) => (
