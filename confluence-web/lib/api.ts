@@ -33,6 +33,8 @@ export interface QuoteRequest {
   recipient?: string;
   /** Stage 8a: pay a Confluence ID; the API resolves it (never the browser). */
   recipientId?: string;
+  /** Optional note for a payment to a Confluence ID (confluence:arc-pay). */
+  note?: string;
   speed: "FAST" | "SLOW";
   useForwarder: boolean;
 }

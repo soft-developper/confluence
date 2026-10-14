@@ -202,7 +202,9 @@ export function ReviewPanel(p: ReviewPanelProps) {
       </div>
 
       <div className="flex flex-col gap-0.5">
-        <span className="text-[13px] text-ink-muted">You receive on {to.name}</span>
+        <span className="text-[13px] text-ink-muted">
+          {selfRecipient ? "You receive" : `${p.recipientLabel ?? shortAddress(recipient)} receives`} on {to.name}
+        </span>
         <span className="tnum text-[40px] leading-[46px] font-medium">
           {fmtUsdc(quote.expectedReceive.usdc)} <span className="text-lg text-ink-muted">USDC</span>
         </span>
