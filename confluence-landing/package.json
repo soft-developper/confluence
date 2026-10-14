@@ -1,0 +1,32 @@
+{
+  "name": "confluence-landing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Confluence landing page (confluencebuild.xyz). The app lives at app.confluencebuild.xyz.",
+  "engines": {
+    "node": ">=24.14.1 <25"
+  },
+  "scripts": {
+    "dev": "next dev --port 3002",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/geist-mono": "5.3.0",
+    "@fontsource/space-grotesk": "5.3.0",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.13.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "postcss": "8.5.28",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3"
+  }
+}
