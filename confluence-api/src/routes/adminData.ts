@@ -6,6 +6,7 @@ import { activity, overview, problems, RANGES, routes, timeseries, treasury } fr
 import { securityEmail } from "../email/resend.js";
 import { requireAdminSession } from "../middleware/adminSession.js";
 import { saveFooter } from "../site/footer.js";
+import { saveDashboard } from "../stats/dashboard.js";
 import { effective, getMaintenance, SetSwitchBody, setMaintenance } from "../site/maintenance.js";
 import { getHousekeeping, PRUNE_AFTER_MS } from "../housekeeping/pruneFailed.js";
 import { getDisabledChains, setChainEnabled } from "../chains/availability.js";
@@ -126,6 +127,15 @@ export function adminDataRouter(d: AdminDeps, registry: ChainRegistry, relayUpst
     active,
     handle(async (req, res) => {
       res.json(await saveFooter(d.db, req.body, req.admin!.email));
+    }),
+  );
+
+  // ---- landing stats dashboard (confluence:stats-dashboard) ----
+  router.put(
+    "/admin/site/stats-dashboard",
+    active,
+    handle(async (req, res) => {
+      res.json(await saveDashboard(d.db, req.body, req.admin!.email));
     }),
   );
 

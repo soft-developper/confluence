@@ -16,6 +16,7 @@ import { siteRouter } from "./routes/site.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminDataRouter } from "./routes/adminData.js";
 import { relayRouter } from "./routes/relay.js";
+import { publicStatsRouter } from "./routes/publicStats.js";
 import { relayUpstreamFor, type RelayUpstream, relayReferrer } from "./relay/upstream.js";
 import { maintenanceGuard } from "./site/maintenance.js";
 import { createEmailSender } from "./email/resend.js";
@@ -88,6 +89,8 @@ export function createApp(
   app.use(swapsRouter(db, swapRegistry));
   app.use(accountRouter(db, config, registry));
   app.use(siteRouter(db));
+  // Public aggregate stats and landing dashboard settings (confluence:public-stats).
+  app.use(publicStatsRouter(db, registry, swapRegistry));
   // Relay attribution uses the public app's domain (https://docs.relay.link/references/relay-kit/sdk/createClient),
   // never the admin site's: ADMIN_WEB_ORIGIN now points at the separate admin dashboard.
   app.use(relayRouter(db, registry, relayUpstream, relayReferrer(config), config.RELAY_API_KEY));
