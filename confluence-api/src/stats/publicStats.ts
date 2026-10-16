@@ -12,7 +12,8 @@ import { formatUsdc } from "../lib/usdc.js";
  *   swap (1 token = 1 USD); swaps with neither side in USDC or USDT count, but add no volume.
  * - Arc Pay: Arc to Arc payments COMPLETED with the payment proven on Arc (pay_verified_at).
  * - Relay: Relay requests with status success that we verified (verified_at); volume is the
- *   USD value Relay reported for the amount sent.
+ *   USD value Relay reported for the amount sent. relayBridge is the cross-chain part (origin
+ *   chain differs from destination chain); the rest are same-chain Relay swaps.
  * Days are UTC calendar days of when the action was created. Wallets are lowercased
  * addresses; a wallet active on several chains is one wallet in the daily total.
  * No wallet address, transaction hash or note ever leaves this module.
@@ -44,24 +45,26 @@ async function all(db: Db, q: ReturnType<typeof sql>): Promise<Row[]> {
 export type ChainIds = ReadonlyMap<string, number>;
 
 /**
- * Every counted action as (day, product, chain, wallet, base amount, usd). Relay rows store
+ * Every counted action as (day, product, chain, wallet, base amount, usd, xc). xc = 1 for a
+ * cross-chain Relay route (confluence:relay-bridge-split), 0 otherwise. Relay rows store
  * the EVM chain id, so their chain is "evm:<id>" and is resolved through ChainIds afterwards.
  */
 const ACTIONS = sql`
   select date(created_at / 1000, 'unixepoch') as day, 'bridge' as product, source_chain as chain, lower(sender) as wallet,
-         cast(amount_base as integer) as base, null as usd
+         cast(amount_base as integer) as base, null as usd, 0 as xc
     from transfers where state = 'COMPLETED' and verified_at is not null
   union all
   select date(created_at / 1000, 'unixepoch'), 'swap', chain, lower(sender), null,
          case when upper(token_in) in ('USDC', 'USDT') then cast(amount_in as real)
               when upper(token_out) in ('USDC', 'USDT') and amount_out is not null then cast(amount_out as real)
-              else null end
+              else null end, 0
     from swaps where state = 'COMPLETED' and verified_at is not null
   union all
-  select date(created_at / 1000, 'unixepoch'), 'arcPay', chain, lower(sender), cast(amount_base as integer), null
+  select date(created_at / 1000, 'unixepoch'), 'arcPay', chain, lower(sender), cast(amount_base as integer), null, 0
     from arc_payments where state = 'COMPLETED' and pay_verified_at is not null
   union all
-  select date(created_at / 1000, 'unixepoch'), 'relay', 'evm:' || origin_chain_id, lower(user_address), null, cast(amount_in_usd as real)
+  select date(created_at / 1000, 'unixepoch'), 'relay', 'evm:' || origin_chain_id, lower(user_address), null, cast(amount_in_usd as real),
+         case when origin_chain_id <> destination_chain_id then 1 else 0 end
     from relay_requests where status = 'success' and verified_at is not null`;
 
 export interface ProductStats {
@@ -82,6 +85,8 @@ export interface ChainDay {
   swap: ProductStats;
   arcPay: ProductStats;
   relay: ProductStats;
+  /** Cross-chain Relay routes only (a subset of relay). */
+  relayBridge: ProductStats;
 }
 
 export interface StatsDay {
@@ -134,6 +139,7 @@ const emptyChain = (chain: string, evmChainId: number | null): ChainDay => ({
   swap: { count: 0, volumeUsd: 0 },
   arcPay: { count: 0, volumeUsdc: "0" },
   relay: { count: 0, volumeUsd: 0 },
+  relayBridge: { count: 0, volumeUsd: 0 },
 });
 
 /** Per-day, per-chain stats for [from, to] (UTC days, inclusive). Every day is present. */
@@ -141,7 +147,8 @@ export async function dailyStats(db: Db, ids: ChainIds, from: string, to: string
   const per = await all(
     db,
     sql`with a as (${ACTIONS})
-        select day, product, chain, count(*) as n, coalesce(sum(base), 0) as base, coalesce(sum(usd), 0) as usd
+        select day, product, chain, count(*) as n, coalesce(sum(base), 0) as base, coalesce(sum(usd), 0) as usd,
+               coalesce(sum(xc), 0) as xcn, coalesce(sum(case when xc = 1 then usd else 0 end), 0) as xcusd
           from a where day between ${from} and ${to} group by day, product, chain`,
   );
   // Wallets per chain per day, and which of them were new that day (first action ever).
@@ -181,6 +188,7 @@ export async function dailyStats(db: Db, ids: ChainIds, from: string, to: string
       c[p] = { count: c[p].count + n, volumeUsdc: formatUsdc(parseUsdcString(c[p].volumeUsdc) + big(r.base)) };
     } else {
       c[p] = { count: c[p].count + n, volumeUsd: usd(num(c[p].volumeUsd) + num(r.usd)) };
+      if (p === "relay") c.relayBridge = { count: c.relayBridge.count + num(r.xcn), volumeUsd: usd(num(c.relayBridge.volumeUsd) + num(r.xcusd)) };
     }
   }
   for (const r of walletsPerChain) {
@@ -210,6 +218,7 @@ export interface StatsTotals {
   swap: { count: number; volumeUsd: number };
   arcPay: { count: number; volumeUsdc: string };
   relay: { count: number; volumeUsd: number };
+  relayBridge: { count: number; volumeUsd: number };
   chains: number;
 }
 
@@ -218,7 +227,9 @@ async function totalsSince(db: Db, ids: ChainIds, fromDay: string | null): Promi
   const rows = await all(
     db,
     sql`with a as (${ACTIONS})
-        select product, count(*) as n, coalesce(sum(base), 0) as base, coalesce(sum(usd), 0) as usd from a ${where} group by product`,
+        select product, count(*) as n, coalesce(sum(base), 0) as base, coalesce(sum(usd), 0) as usd,
+               coalesce(sum(xc), 0) as xcn, coalesce(sum(case when xc = 1 then usd else 0 end), 0) as xcusd
+          from a ${where} group by product`,
   );
   const [w] = await all(db, sql`with a as (${ACTIONS}) select count(distinct wallet) as wallets from a ${where}`);
   // Relay rows name chains by EVM id: resolve before counting, so Ethereum is one chain.
@@ -233,6 +244,7 @@ async function totalsSince(db: Db, ids: ChainIds, fromDay: string | null): Promi
     swap: { count: num(p("swap")?.n), volumeUsd: usd(p("swap")?.usd) },
     arcPay: { count: num(p("arcPay")?.n), volumeUsdc: formatUsdc(big(p("arcPay")?.base)) },
     relay: { count: num(p("relay")?.n), volumeUsd: usd(p("relay")?.usd) },
+    relayBridge: { count: num(p("relay")?.xcn), volumeUsd: usd(p("relay")?.xcusd) },
     chains: chains.size,
   };
 }

@@ -159,7 +159,8 @@ before(async () => {
       updatedAt: at(0),
       ...o,
     } as typeof schema.relayRequests.$inferInsert);
-  await relay({}); // Ethereum (EVM id 1), 2,500.50 USD
+  await relay({}); // Ethereum (EVM id 1) to Base: cross-chain, 2,500.50 USD
+  await relay({ destinationChainId: 1, amountInUsd: "40" }); // Ethereum to Ethereum: same-chain Relay swap, 40 USD
   await relay({ status: "waiting", amountInUsd: "100" }); // ignored
 });
 after(() => {
@@ -178,8 +179,8 @@ describe("public stats: daily", () => {
     assert.equal(y.chains[0]!.bridge.volumeUsdc, "1000");
 
     assert.equal(t.date, TODAY);
-    // Today: A bridge Arc, B bridge Base, 3 swaps on Arc, 1 Arc Pay, 1 Relay.
-    assert.equal(t.transactions, 7);
+    // Today: A bridge Arc, B bridge Base, 3 swaps on Arc, 1 Arc Pay, 2 Relay.
+    assert.equal(t.transactions, 8);
     const arc = t.chains.find((c) => c.chain === "Arc")!;
     assert.deepEqual(arc.bridge, { count: 1, volumeUsdc: "4.6" });
     assert.deepEqual(arc.swap, { count: 3, volumeUsd: 12.25 });
@@ -193,7 +194,8 @@ describe("public stats: daily", () => {
     const [, t] = await dailyStats(db, IDS, YDAY, TODAY);
     const eth = t!.chains.find((c) => c.chain === "Ethereum")!;
     assert.equal(eth.evmChainId, 1);
-    assert.deepEqual(eth.relay, { count: 1, volumeUsd: 2500.5 });
+    assert.deepEqual(eth.relay, { count: 2, volumeUsd: 2540.5 });
+    assert.deepEqual(eth.relayBridge, { count: 1, volumeUsd: 2500.5 }, "only the cross-chain route");
   });
 
   it("deduplicates wallets across chains and counts new wallets by their first day", async () => {
@@ -220,12 +222,13 @@ describe("public stats: daily", () => {
 describe("public stats: summary", () => {
   it("adds up all-time and last-30-day totals and a 90-day series", async () => {
     const s = await statsSummary(db, IDS, NOW);
-    assert.equal(s.allTime.transactions, 8);
+    assert.equal(s.allTime.transactions, 9);
     assert.equal(s.allTime.wallets, 3);
     assert.deepEqual(s.allTime.bridge, { count: 3, volumeUsdc: "1007.1" });
     assert.deepEqual(s.allTime.swap, { count: 3, volumeUsd: 12.25 });
     assert.deepEqual(s.allTime.arcPay, { count: 1, volumeUsdc: "10" });
-    assert.deepEqual(s.allTime.relay, { count: 1, volumeUsd: 2500.5 });
+    assert.deepEqual(s.allTime.relay, { count: 2, volumeUsd: 2540.5 });
+    assert.deepEqual(s.allTime.relayBridge, { count: 1, volumeUsd: 2500.5 });
     assert.equal(s.allTime.chains, 3, "Arc, Base and Ethereum (Relay's EVM id 1 resolved)");
     assert.equal(s.series.length, 90);
     assert.equal(s.series.at(-1)!.date, TODAY);
