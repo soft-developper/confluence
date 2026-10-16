@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { applyTheme, readTheme, type ThemeChoice } from "./theme";
+import { applyTheme, watchTheme, type ThemeChoice } from "./theme";
 
 const ORDER: ThemeChoice[] = ["system", "light", "dark"];
 const LABEL: Record<ThemeChoice, string> = { system: "System", light: "Light", dark: "Dark" };
 
+/**
+ * Theme switch (confluence:theme-sync): System, Light, Dark. The choice is shared with every
+ * Confluence site; System follows the device live.
+ */
 export function ThemeToggle() {
   const [choice, setChoice] = useState<ThemeChoice>("system");
 
-  useEffect(() => {
-    setChoice(readTheme());
-  }, []);
+  useEffect(() => watchTheme(setChoice), []);
 
   function next() {
     const n = ORDER[(ORDER.indexOf(choice) + 1) % ORDER.length] ?? "system";

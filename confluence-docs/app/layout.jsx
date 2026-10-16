@@ -6,6 +6,7 @@ import "@fontsource/space-grotesk/500.css";
 import "@fontsource/geist-mono/400.css";
 import "nextra-theme-docs/style.css";
 import "./globals.css";
+import { ThemeSync, THEME_SYNC_HEAD_SCRIPT } from "./theme-sync";
 
 // Confluence docs layout, configured as in https://nextra.site/docs/docs-theme/start (confluence:docs-layout)
 const APP_URL = "https://app.confluencebuild.xyz";
@@ -47,9 +48,13 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       {/* Confluence action color #5d5aef as the theme hue */}
-      <Head color={{ hue: 241, saturation: 82 }} />
+      <Head color={{ hue: 241, saturation: 82 }}>
+        {/* Shared theme across Confluence sites (confluence:theme-sync): runs before Nextra's theme script. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SYNC_HEAD_SCRIPT }} />
+      </Head>
       <body>
         <Layout navbar={navbar} footer={footer} pageMap={await getPageMap()} editLink={null} feedback={{ content: null }} sidebar={{ defaultMenuCollapseLevel: 1 }}>
+          <ThemeSync />
           {children}
         </Layout>
       </body>

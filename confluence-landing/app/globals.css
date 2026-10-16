@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* dark: utilities follow the chosen theme (data-theme on <html>), not only the device
+   (confluence:theme-sync). https://tailwindcss.com/docs/dark-mode#using-a-data-attribute */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 /* Confluence brand tokens. Source of truth: the Confluence design system. */
 :root,
 [data-theme="dark"] {
