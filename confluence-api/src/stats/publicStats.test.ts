@@ -224,6 +224,9 @@ describe("public stats: summary", () => {
     const s = await statsSummary(db, IDS, NOW);
     assert.equal(s.allTime.transactions, 9);
     assert.equal(s.allTime.wallets, 3);
+    assert.equal(s.allTime.newWallets, 3, "all time: every wallet is new once");
+    assert.equal(s.last30d.newWallets, 3, "A was first seen yesterday, B and C today");
+    assert.equal(s.last90d.transactions, s.allTime.transactions);
     assert.deepEqual(s.allTime.bridge, { count: 3, volumeUsdc: "1007.1" });
     assert.deepEqual(s.allTime.swap, { count: 3, volumeUsd: 12.25 });
     assert.deepEqual(s.allTime.arcPay, { count: 1, volumeUsdc: "10" });

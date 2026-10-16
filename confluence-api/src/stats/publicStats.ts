@@ -213,7 +213,10 @@ export async function dailyStats(db: Db, ids: ChainIds, from: string, to: string
 
 export interface StatsTotals {
   transactions: number;
+  /** Distinct wallets active in the window. */
   wallets: number;
+  /** Wallets whose first ever action falls in the window (all time: every wallet). */
+  newWallets: number;
   bridge: { count: number; volumeUsdc: string };
   swap: { count: number; volumeUsd: number };
   arcPay: { count: number; volumeUsdc: string };
@@ -232,6 +235,11 @@ async function totalsSince(db: Db, ids: ChainIds, fromDay: string | null): Promi
           from a ${where} group by product`,
   );
   const [w] = await all(db, sql`with a as (${ACTIONS}) select count(distinct wallet) as wallets from a ${where}`);
+  const [nw] = await all(
+    db,
+    sql`with a as (${ACTIONS}), first as (select wallet, min(day) as first_day from a group by wallet)
+        select count(*) as n from first ${fromDay ? sql`where first_day >= ${fromDay}` : sql``}`,
+  );
   // Relay rows name chains by EVM id: resolve before counting, so Ethereum is one chain.
   const rawChains = await all(db, sql`with a as (${ACTIONS}) select distinct chain from a ${where}`);
   const chains = new Set(rawChains.map((r) => resolveChain(String(r.chain), ids).chain));
@@ -240,6 +248,7 @@ async function totalsSince(db: Db, ids: ChainIds, fromDay: string | null): Promi
   return {
     transactions: rows.reduce((s, r) => s + num(r.n), 0),
     wallets: num(w?.wallets),
+    newWallets: num(nw?.n),
     bridge: { count: num(p("bridge")?.n), volumeUsdc: formatUsdc(big(p("bridge")?.base)) },
     swap: { count: num(p("swap")?.n), volumeUsd: usd(p("swap")?.usd) },
     arcPay: { count: num(p("arcPay")?.n), volumeUsdc: formatUsdc(big(p("arcPay")?.base)) },
@@ -260,10 +269,11 @@ export interface SeriesPoint {
   relayVolumeUsd: number;
 }
 
-/** All-time and last-30-day totals, plus a daily series of the last SERIES_DAYS days. */
+/** All-time, last-30-day and last-90-day totals, plus a daily series of the last SERIES_DAYS days. */
 export async function statsSummary(db: Db, ids: ChainIds, now = Date.now()) {
   const today = utcDay(now);
   const from30 = utcDay(now - 29 * DAY_MS);
+  const from90 = utcDay(now - 89 * DAY_MS);
   const days = await dailyStats(db, ids, utcDay(now - (SERIES_DAYS - 1) * DAY_MS), today);
   const series: SeriesPoint[] = days.map((d) => {
     const bridge = d.chains.reduce((s, c) => s + parseUsdcString(c.bridge.volumeUsdc), 0n);
@@ -285,6 +295,7 @@ export async function statsSummary(db: Db, ids: ChainIds, now = Date.now()) {
     generatedAt: new Date(now).toISOString(),
     allTime: await totalsSince(db, ids, null),
     last30d: await totalsSince(db, ids, from30),
+    last90d: await totalsSince(db, ids, from90),
     series,
   };
 }

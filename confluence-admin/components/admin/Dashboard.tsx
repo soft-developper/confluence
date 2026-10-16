@@ -21,8 +21,9 @@ import { Bars, Btn, ErrorText, Field, inputCls, Panel, Stat } from "./ui";
 import { Pager, paginate } from "@/components/Pager";
 import { PayTab } from "./PayTab";
 import { RelayTab } from "./RelayTab";
+import { StatsTab } from "./StatsTab";
 
-const TABS = ["Overview", "Activity", "Pay", "Problems", "Treasury", "Chains", "Relay", "Maintenance", "Footer", "Account"] as const;
+const TABS = ["Overview", "Activity", "Pay", "Problems", "Treasury", "Chains", "Relay", "Maintenance", "Stats", "Footer", "Account"] as const;
 type Tab = (typeof TABS)[number];
 
 const pct = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
@@ -80,6 +81,7 @@ export function Dashboard({ email, onSignOut }: { email: string; onSignOut: () =
       {tab === "Chains" && <ChainsTab />}
       {tab === "Relay" && <RelayTab />}
       {tab === "Maintenance" && <MaintenanceTab />}
+      {tab === "Stats" && <StatsTab />}
       {tab === "Footer" && <FooterTab />}
       {tab === "Account" && <AccountTab />}
     </div>
