@@ -84,3 +84,60 @@ export async function getFooter(): Promise<LandingFooter> {
     return { builtBy: null, copyright: null, socials: [] };
   }
 }
+
+// ---------- stats dashboard (confluence:landing-stats, D5) ----------
+
+export const STAT_METRICS = ["bridgeVolume", "transactions", "activeWallets", "newWallets", "swapVolume", "arcPayVolume", "relayVolume", "chains"] as const;
+export type StatMetric = (typeof STAT_METRICS)[number];
+export type StatRange = "30d" | "90d" | "all";
+
+const DashboardSchema = z.object({
+  settings: z.object({
+    enabled: z.boolean(),
+    metrics: z.array(z.enum(STAT_METRICS)),
+    range: z.enum(["30d", "90d", "all"]),
+    source: z.enum(["confluence", "defillama"]),
+    defillamaSlug: z.string().nullable(),
+  }),
+});
+export type StatsDashboard = z.infer<typeof DashboardSchema>["settings"];
+
+const TotalsSchema = z.object({
+  transactions: z.number(),
+  wallets: z.number(),
+  newWallets: z.number().optional(),
+  bridge: z.object({ count: z.number(), volumeUsdc: z.string() }),
+  swap: z.object({ count: z.number(), volumeUsd: z.number() }),
+  arcPay: z.object({ count: z.number(), volumeUsdc: z.string() }),
+  relay: z.object({ count: z.number(), volumeUsd: z.number() }),
+  relayBridge: z.object({ count: z.number(), volumeUsd: z.number() }).optional(),
+  chains: z.number(),
+});
+export type StatTotals = z.infer<typeof TotalsSchema>;
+
+const SummarySchema = z.object({
+  generatedAt: z.string(),
+  allTime: TotalsSchema,
+  last30d: TotalsSchema,
+  last90d: TotalsSchema.optional(),
+  series: z.array(z.object({ date: z.string(), transactions: z.number(), activeWallets: z.number() })),
+});
+export type StatSummary = z.infer<typeof SummarySchema>;
+
+/**
+ * The stats section, or null when it should not show: switched off in admin, no figures
+ * picked, or the API unreachable (the page then renders without the section, never broken).
+ */
+export async function getStats(): Promise<{ dashboard: StatsDashboard; summary: StatSummary } | null> {
+  try {
+    const d = await fetch(`${API_URL}/site/stats-dashboard`, { next: { revalidate: REVALIDATE } });
+    if (!d.ok) return null;
+    const dashboard = DashboardSchema.parse(await d.json()).settings;
+    if (!dashboard.enabled || dashboard.metrics.length === 0) return null;
+    const s = await fetch(`${API_URL}/public/stats/summary`, { next: { revalidate: REVALIDATE } });
+    if (!s.ok) return null;
+    return { dashboard, summary: SummarySchema.parse(await s.json()) };
+  } catch {
+    return null;
+  }
+}

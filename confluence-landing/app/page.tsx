@@ -9,19 +9,21 @@ import { Faq } from "@/components/Faq";
 import { FinalCta } from "@/components/FinalCta";
 import { SiteFooter } from "@/components/SiteFooter";
 import { BackgroundMarks } from "@/components/BrandMarks";
-import { getChains, getFooter } from "@/lib/site";
+import { getChains, getFooter, getStats } from "@/lib/site";
+import { StatsSection } from "@/components/StatsSection";
 
 // Re-read chains and footer from the API every 5 minutes (matches lib/site.ts).
 export const revalidate = 300;
 
 export default async function LandingPage() {
-  const [chains, footer] = await Promise.all([getChains(), getFooter()]);
+  const [chains, footer, stats] = await Promise.all([getChains(), getFooter(), getStats()]);
   return (
     <>
       <BackgroundMarks />
       <SiteHeader />
       <main className="flex flex-1 flex-col">
         <Hero chains={chains} />
+        <StatsSection stats={stats} />
         <Offer />
         <HowItWorks />
         <WhyUs />
