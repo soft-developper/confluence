@@ -33,6 +33,8 @@ export const DashboardSettingsSchema = z
     range: z.enum(["30d", "90d", "all"]).default("30d"),
     /** Where the numbers come from: our own stats now, DefiLlama once Confluence is listed. */
     source: z.enum(["confluence", "defillama"]).default("confluence"),
+    /** Show a link to Confluence's DefiLlama page on the landing page (confluence:defillama-link). */
+    showDefillamaLink: z.boolean().default(false),
     /** DefiLlama slug once listed (lowercase letters, digits and hyphens). */
     defillamaSlug: z
       .string()
@@ -42,7 +44,8 @@ export const DashboardSettingsSchema = z
       .default(null),
   })
   .strict()
-  .refine((s) => s.source !== "defillama" || s.defillamaSlug !== null, { message: "set the DefiLlama slug before using DefiLlama as the source", path: ["defillamaSlug"] });
+  .refine((s) => s.source !== "defillama" || s.defillamaSlug !== null, { message: "set the DefiLlama slug before using DefiLlama as the source", path: ["defillamaSlug"] })
+  .refine((s) => !s.showDefillamaLink || s.defillamaSlug !== null, { message: "set the DefiLlama slug before showing the DefiLlama link", path: ["defillamaSlug"] });
 export type DashboardSettings = z.infer<typeof DashboardSettingsSchema>;
 
 const KEY = "stats_dashboard";

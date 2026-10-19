@@ -6,7 +6,7 @@ import { APP_URL, DOCS_URL, type LandingChains } from "@/lib/site";
  * and teams first); no fee wording here, the quote in the app shows fees. The picture on the
  * right is the live chain list flowing into Arc.
  */
-export function Hero({ chains }: { chains: LandingChains }) {
+export function Hero({ chains, defillamaUrl }: { chains: LandingChains; defillamaUrl: string | null }) {
   const arcName = chains.arc?.name ?? "Arc";
   const total = chains.others.length + (chains.arc ? 1 : 0);
   return (
@@ -36,6 +36,20 @@ export function Hero({ chains }: { chains: LandingChains }) {
         <p className="border-l-2 border-destination pl-3 text-sm text-ink-muted">
           Confluence never holds your funds or your keys. Every transfer goes from your wallet straight to Circle or Relay.
         </p>
+        {/* Public numbers on DefiLlama, shown when switched on in admin (confluence:defillama-link). */}
+        {defillamaUrl && (
+          <a
+            href={defillamaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 self-start rounded-md text-sm font-medium text-action-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-text"
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4">
+              <path d="M2 13h12M4 11V7M8 11V3M12 11V6" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            </svg>
+            See Confluence&rsquo;s volume and users on DefiLlama
+          </a>
+        )}
       </div>
 
       <figure className="flex flex-col gap-3">

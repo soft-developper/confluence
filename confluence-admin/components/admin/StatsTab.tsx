@@ -22,6 +22,8 @@ interface DashboardSettings {
   metrics: Metric[];
   range: Range;
   source: Source;
+  /** Older APIs omit it (treated as off). */
+  showDefillamaLink?: boolean;
   defillamaSlug: string | null;
 }
 
@@ -98,6 +100,7 @@ function StatsForm({ initial, updatedAt }: { initial: DashboardSettings; updated
   const [range, setRange] = useState<Range>(initial.range);
   const [source, setSource] = useState<Source>(initial.source);
   const [slug, setSlug] = useState(initial.defillamaSlug ?? "");
+  const [showLink, setShowLink] = useState(initial.showDefillamaLink ?? false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -116,6 +119,7 @@ function StatsForm({ initial, updatedAt }: { initial: DashboardSettings; updated
     range !== initial.range ||
     source !== initial.source ||
     (slugClean || null) !== initial.defillamaSlug ||
+    showLink !== (initial.showDefillamaLink ?? false) ||
     metrics.join() !== initial.metrics.join();
 
   function toggle(m: Metric) {
@@ -142,6 +146,10 @@ function StatsForm({ initial, updatedAt }: { initial: DashboardSettings; updated
       setErr("Add the DefiLlama slug before using DefiLlama as the source.");
       return;
     }
+    if (showLink && !slugClean) {
+      setErr("Add the DefiLlama slug before showing the DefiLlama link.");
+      return;
+    }
     if (enabled && metrics.length === 0) {
       setErr("Pick at least one figure before showing the dashboard.");
       return;
@@ -150,10 +158,15 @@ function StatsForm({ initial, updatedAt }: { initial: DashboardSettings; updated
     try {
       await adminFetch("/admin/site/stats-dashboard", {
         method: "PUT",
-        body: { enabled, metrics, range, source, defillamaSlug: slugClean || null },
+        body: { enabled, metrics, range, source, showDefillamaLink: showLink, defillamaSlug: slugClean || null },
       });
       await qc.invalidateQueries({ queryKey: ["admin-stats-dashboard"] });
-      setSaved(enabled ? "Saved. The landing page shows the dashboard within a few minutes." : "Saved. The dashboard stays hidden on the landing page.");
+      setSaved(
+        [
+          enabled ? "The stats section shows" : "The stats section stays hidden",
+          showLink ? "the DefiLlama link shows" : "the DefiLlama link stays hidden",
+        ].join(", ") + " on the landing page. Changes appear within a few minutes.",
+      );
     } catch (e) {
       const x = e as AdminApiError;
       setErr(x.code === "invalid_request" ? "The API refused these settings. Check the slug and the source." : errText(e));
@@ -162,8 +175,36 @@ function StatsForm({ initial, updatedAt }: { initial: DashboardSettings; updated
     }
   }
 
+  const llamaUrl = slugClean && slugOk ? `https://defillama.com/protocol/${slugClean}` : null;
   return (
     <div className="flex flex-col gap-6">
+      <Panel title="DefiLlama">
+        <p className="text-xs text-ink-muted">
+          Confluence&apos;s public page on DefiLlama. The link appears in the landing page hero and footer and opens DefiLlama&apos;s dashboard.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <Field label="DefiLlama slug" hint="The last part of the DefiLlama page link, e.g. confluence.">
+            <input className={inputCls} value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="confluence" maxLength={63} />
+          </Field>
+          {llamaUrl && (
+            <a href={llamaUrl} target="_blank" rel="noopener noreferrer" className="h-10 content-center text-sm text-action-text hover:underline">
+              Open {llamaUrl.replace("https://", "")}
+            </a>
+          )}
+        </div>
+        <label className={`flex items-center gap-3 text-sm ${!llamaUrl ? "opacity-60" : ""}`}>
+          <input
+            type="checkbox"
+            checked={showLink}
+            disabled={!llamaUrl && !showLink}
+            onChange={(e) => setShowLink(e.target.checked)}
+            className="h-4 w-4 accent-[var(--color-action)]"
+          />
+          <span className="font-medium">Show the DefiLlama link on the landing page</span>
+        </label>
+        {!llamaUrl && <p className="text-xs text-ink-muted">Add the slug to turn the link on.</p>}
+      </Panel>
+
       <Panel title="Landing stats">
         <p className="text-xs text-ink-muted">
           Controls the stats section on confluencebuild.xyz. Numbers are aggregates only (no addresses), counted the same way as this dashboard.
@@ -209,7 +250,7 @@ function StatsForm({ initial, updatedAt }: { initial: DashboardSettings; updated
           )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Range shown first">
             <select className={inputCls} value={range} onChange={(e) => setRange(e.target.value as Range)}>
               {(Object.keys(RANGE_LABEL) as Range[]).map((r) => (
@@ -223,12 +264,9 @@ function StatsForm({ initial, updatedAt }: { initial: DashboardSettings; updated
             <select className={inputCls} value={source} onChange={(e) => setSource(e.target.value as Source)}>
               <option value="confluence">Confluence</option>
               <option value="defillama" disabled={!slugClean || !slugOk}>
-                DefiLlama{!slugClean ? " (add the slug first)" : ""}
+                DefiLlama{!slugClean ? " (add the slug above first)" : ""}
               </option>
             </select>
-          </Field>
-          <Field label="DefiLlama slug" hint="From the DefiLlama page link once listed, e.g. confluence.">
-            <input className={inputCls} value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="confluence" maxLength={63} />
           </Field>
         </div>
 

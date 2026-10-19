@@ -18,7 +18,7 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
-export function SiteFooter({ footer }: { footer: LandingFooter }) {
+export function SiteFooter({ footer, defillamaUrl }: { footer: LandingFooter; defillamaUrl: string | null }) {
   return (
     <footer className="relative mt-auto overflow-hidden border-t border-border bg-surface">
       <Mark className="absolute -right-10 -bottom-24 h-[360px] w-auto opacity-[0.07] sm:h-[440px] dark:opacity-[0.09]" />
@@ -44,6 +44,7 @@ export function SiteFooter({ footer }: { footer: LandingFooter }) {
           <FooterLink href={`${APP_URL}/swap`}>Swap</FooterLink>
           <FooterLink href={`${APP_URL}/pay`}>Pay</FooterLink>
           <FooterLink href={DOCS_URL}>Docs</FooterLink>
+          {defillamaUrl && <FooterLink href={defillamaUrl}>Stats on DefiLlama</FooterLink>}
         </nav>
 
         <div className="flex flex-col gap-2 text-sm text-ink-muted">

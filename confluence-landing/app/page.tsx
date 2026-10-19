@@ -9,20 +9,20 @@ import { Faq } from "@/components/Faq";
 import { FinalCta } from "@/components/FinalCta";
 import { SiteFooter } from "@/components/SiteFooter";
 import { BackgroundMarks } from "@/components/BrandMarks";
-import { getChains, getFooter, getStats } from "@/lib/site";
+import { getChains, getDefillamaUrl, getFooter, getStats } from "@/lib/site";
 import { StatsSection } from "@/components/StatsSection";
 
 // Re-read chains and footer from the API every 5 minutes (matches lib/site.ts).
 export const revalidate = 300;
 
 export default async function LandingPage() {
-  const [chains, footer, stats] = await Promise.all([getChains(), getFooter(), getStats()]);
+  const [chains, footer, stats, defillamaUrl] = await Promise.all([getChains(), getFooter(), getStats(), getDefillamaUrl()]);
   return (
     <>
       <BackgroundMarks />
       <SiteHeader />
       <main className="flex flex-1 flex-col">
-        <Hero chains={chains} />
+        <Hero chains={chains} defillamaUrl={defillamaUrl} />
         <StatsSection stats={stats} />
         <Offer />
         <HowItWorks />
@@ -32,7 +32,7 @@ export default async function LandingPage() {
         <Faq />
         <FinalCta />
       </main>
-      <SiteFooter footer={footer} />
+      <SiteFooter footer={footer} defillamaUrl={defillamaUrl} />
     </>
   );
 }

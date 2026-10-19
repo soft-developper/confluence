@@ -261,6 +261,11 @@ describe("stats dashboard settings", () => {
     await assert.rejects(saveDashboard(db, { source: "defillama" }, "owner@example.com"), "DefiLlama needs a slug");
     await assert.rejects(saveDashboard(db, { defillamaSlug: "Confluence!" }, "owner@example.com"));
     await assert.rejects(saveDashboard(db, { extra: 1 }, "owner@example.com"));
+    assert.equal(DEFAULT_DASHBOARD.showDefillamaLink, false, "the DefiLlama link is off by default");
+    await assert.rejects(saveDashboard(db, { showDefillamaLink: true }, "owner@example.com"), "the link needs a slug");
+    const link = await saveDashboard(db, { showDefillamaLink: true, defillamaSlug: "confluence" }, "owner@example.com");
+    assert.equal(link.settings.showDefillamaLink, true);
+    assert.equal(link.settings.enabled, false, "the link works with the stats section switched off");
   });
 });
 

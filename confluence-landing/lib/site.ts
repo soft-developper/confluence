@@ -97,6 +97,7 @@ const DashboardSchema = z.object({
     metrics: z.array(z.enum(STAT_METRICS)),
     range: z.enum(["30d", "90d", "all"]),
     source: z.enum(["confluence", "defillama"]),
+    showDefillamaLink: z.boolean().optional(),
     defillamaSlug: z.string().nullable(),
   }),
 });
@@ -123,6 +124,22 @@ const SummarySchema = z.object({
   series: z.array(z.object({ date: z.string(), transactions: z.number(), activeWallets: z.number() })),
 });
 export type StatSummary = z.infer<typeof SummarySchema>;
+
+/**
+ * Link to Confluence's DefiLlama page (confluence:defillama-link), or null when the admin has
+ * not switched it on. Independent of the stats section. Same cached request as getStats.
+ */
+export async function getDefillamaUrl(): Promise<string | null> {
+  try {
+    const d = await fetch(`${API_URL}/site/stats-dashboard`, { next: { revalidate: REVALIDATE } });
+    if (!d.ok) return null;
+    const { showDefillamaLink, defillamaSlug } = DashboardSchema.parse(await d.json()).settings;
+    if (!showDefillamaLink || !defillamaSlug || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(defillamaSlug)) return null;
+    return `https://defillama.com/protocol/${defillamaSlug}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The stats section, or null when it should not show: switched off in admin, no figures
