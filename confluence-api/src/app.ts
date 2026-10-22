@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { ipRateLimit, setTrustedProxyHops } from "./middleware/rateLimits.js";
+import { rejectBrotliBodies } from "./middleware/encoding.js";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { healthRouter } from "./routes/health.js";
@@ -68,6 +69,8 @@ export function createApp(
   );
 
   app.use(ipRateLimit());
+  // Before the JSON parser: never hand a Brotli body to Node's decoder (confluence:security-oct26).
+  app.use(rejectBrotliBodies);
   app.use(
     express.json({
       limit: "100kb",

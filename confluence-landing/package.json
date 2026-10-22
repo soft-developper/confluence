@@ -4,7 +4,7 @@
   "private": true,
   "description": "Confluence landing page (confluencebuild.xyz). The app lives at app.confluencebuild.xyz.",
   "engines": {
-    "node": ">=24.14.1 <25"
+    "node": ">=24.22.1 <25"
   },
   "scripts": {
     "dev": "next dev --port 3002",
@@ -15,7 +15,7 @@
   "dependencies": {
     "@fontsource/geist-mono": "5.3.0",
     "@fontsource/space-grotesk": "5.3.0",
-    "next": "16.3.6",
+    "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "4.6.5"
