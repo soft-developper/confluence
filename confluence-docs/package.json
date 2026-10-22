@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next",
     "build": "next build",
-    "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
+    "postbuild": "node scripts/pagefind-site.mjs && pagefind --site .next/pagefind-site --output-path public/_pagefind",
     "start": "next start"
   },
   "dependencies": {
